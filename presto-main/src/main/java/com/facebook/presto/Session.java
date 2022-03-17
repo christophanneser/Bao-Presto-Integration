@@ -42,6 +42,7 @@ import io.airlift.units.Duration;
 
 import java.security.Principal;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -90,6 +91,7 @@ public final class Session
     private final Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions;
     private final AccessControlContext context;
     private final Optional<Tracer> tracer;
+    private final Set<String> disabledOptimizers;
 
     private final RuntimeStats runtimeStats = new RuntimeStats();
 
@@ -116,7 +118,9 @@ public final class Session
             SessionPropertyManager sessionPropertyManager,
             Map<String, String> preparedStatements,
             Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions,
-            Optional<Tracer> tracer)
+            Optional<Tracer> tracer,
+            Set<String> disabledOptimizers
+    )
     {
         this.queryId = requireNonNull(queryId, "queryId is null");
         this.transactionId = requireNonNull(transactionId, "transactionId is null");
@@ -138,6 +142,7 @@ public final class Session
         this.sessionPropertyManager = requireNonNull(sessionPropertyManager, "sessionPropertyManager is null");
         this.preparedStatements = requireNonNull(preparedStatements, "preparedStatements is null");
         this.sessionFunctions = requireNonNull(sessionFunctions, "sessionFunctions is null");
+        this.disabledOptimizers = requireNonNull(disabledOptimizers, "disabledOptimizers is null");
 
         ImmutableMap.Builder<ConnectorId, Map<String, String>> catalogPropertiesBuilder = ImmutableMap.builder();
         connectorProperties.entrySet().stream()
@@ -156,6 +161,17 @@ public final class Session
         checkArgument(catalog.isPresent() || !schema.isPresent(), "schema is set but catalog is not");
         this.context = new AccessControlContext(queryId, clientInfo, source);
         this.tracer = requireNonNull(tracer, "tracer is null");
+    }
+
+    public static SessionBuilder builder(SessionPropertyManager sessionPropertyManager)
+    {
+        return new SessionBuilder(sessionPropertyManager);
+    }
+
+    @VisibleForTesting
+    public static SessionBuilder builder(Session session)
+    {
+        return new SessionBuilder(session);
     }
 
     public QueryId getQueryId()
@@ -311,6 +327,11 @@ public final class Session
         return tracer;
     }
 
+    public Set<String> getDisabledOptimizers()
+    {
+        return disabledOptimizers;
+    }
+
     public Session beginTransactionId(TransactionId transactionId, TransactionManager transactionManager, AccessControl accessControl)
     {
         requireNonNull(transactionId, "transactionId is null");
@@ -401,7 +422,9 @@ public final class Session
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                tracer);
+                tracer,
+                new HashSet<>()
+        );
     }
 
     public Session withDefaultProperties(
@@ -455,7 +478,9 @@ public final class Session
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                tracer);
+                tracer,
+                new HashSet<>()
+        );
     }
 
     public ConnectorSession toConnectorSession()
@@ -544,19 +569,14 @@ public final class Session
                 .toString();
     }
 
-    public static SessionBuilder builder(SessionPropertyManager sessionPropertyManager)
-    {
-        return new SessionBuilder(sessionPropertyManager);
-    }
-
-    @VisibleForTesting
-    public static SessionBuilder builder(Session session)
-    {
-        return new SessionBuilder(session);
-    }
-
     public static class SessionBuilder
     {
+        private final Map<String, String> systemProperties = new HashMap<>();
+        private final Map<ConnectorId, Map<String, String>> connectorProperties = new HashMap<>();
+        private final Map<String, Map<String, String>> catalogSessionProperties = new HashMap<>();
+        private final SessionPropertyManager sessionPropertyManager;
+        private final Map<String, String> preparedStatements = new HashMap<>();
+        private final Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions = new HashMap<>();
         private QueryId queryId;
         private TransactionId transactionId;
         private boolean clientTransactionSupport;
@@ -574,12 +594,6 @@ public final class Session
         private ResourceEstimates resourceEstimates;
         private Optional<Tracer> tracer = Optional.empty();
         private long startTime = System.currentTimeMillis();
-        private final Map<String, String> systemProperties = new HashMap<>();
-        private final Map<ConnectorId, Map<String, String>> connectorProperties = new HashMap<>();
-        private final Map<String, Map<String, String>> catalogSessionProperties = new HashMap<>();
-        private final SessionPropertyManager sessionPropertyManager;
-        private final Map<String, String> preparedStatements = new HashMap<>();
-        private final Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions = new HashMap<>();
 
         private SessionBuilder(SessionPropertyManager sessionPropertyManager)
         {
@@ -780,7 +794,9 @@ public final class Session
                     sessionPropertyManager,
                     preparedStatements,
                     sessionFunctions,
-                    tracer);
+                    tracer,
+                    new HashSet<>()
+            );
         }
     }
 

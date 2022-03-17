@@ -32,6 +32,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableMap;
 
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -331,6 +332,8 @@ public final class SessionRepresentation
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                Optional.empty());
+                Optional.empty(),
+                new HashSet<>()
+        );
     }
 }
