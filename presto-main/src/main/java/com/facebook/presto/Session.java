@@ -177,6 +177,11 @@ public final class Session
         return new SessionBuilder(session);
     }
 
+    public OptimizerConfiguration getOptimizerConfiguration()
+    {
+        return optimizerConfiguration;
+    }
+
     public QueryId getQueryId()
     {
         return queryId;

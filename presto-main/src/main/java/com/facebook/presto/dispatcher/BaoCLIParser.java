@@ -64,17 +64,17 @@ public class BaoCLIParser
 
             switch (setting.toLowerCase(Locale.getDefault())) {
                 case "optimizers":
-//                    OptimizerConfig.disableOptimizers(Arrays.asList(values));
+                    session.getOptimizerConfiguration().disableOptimizers(Arrays.asList(values));
                     log.info("Disable optimizers:" + Arrays.toString(values));
                     return true;
                 case "rules":
-//                    OptimizerConfig.disableRules(Arrays.asList(values));
+                    session.getOptimizerConfiguration().disableRules(Arrays.asList(values));
                     log.info("Disable rules:" + Arrays.toString(values));
                     return true;
             }
         }
         if (query.equalsIgnoreCase("reset optimizers")) {
-//            OptimizerConfig.reset();
+            session.getOptimizerConfiguration().reset();
             log.info("Successfully reset optimizer configuration!");
             return true;
         }

@@ -266,6 +266,7 @@ public class OptimizerConfiguration
     public void disableOptimizers(List<String> optimizers)
     {
         reset();
+        System.out.println("disable optimizers ...");
         for (String optimizer : optimizers) {
             assert (optimizersEnabled.containsKey(optimizer));
             optimizersEnabled.replace(optimizer, false);
