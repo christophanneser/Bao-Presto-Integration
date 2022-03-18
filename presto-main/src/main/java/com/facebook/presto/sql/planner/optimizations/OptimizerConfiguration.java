@@ -38,7 +38,6 @@ public class OptimizerConfiguration
     // en/disable optimizers and rules
     public Map<String, Boolean> optimizersEnabled = createConfigMapFromList(optimizerNames());
     public Map<String, Boolean> rulesEnabled = createConfigMapFromList(ruleNames());
-
     // track optimizers and rules if they are required or effective
     public Set<String> effectiveOptimizers;
     public Set<String> effectiveRules;
@@ -247,6 +246,16 @@ public class OptimizerConfiguration
             map.put(ruleName, true); // all optimizers/rules are enabled by default
         }
         return map;
+    }
+
+    public Boolean isOptimizerEnabled(String optimizer)
+    {
+        return optimizersEnabled.get(optimizer);
+    }
+
+    public Boolean isRuleEnabled(String rule)
+    {
+        return rulesEnabled.get(rule);
     }
 
     public void registerRuleHit(String ruleName)

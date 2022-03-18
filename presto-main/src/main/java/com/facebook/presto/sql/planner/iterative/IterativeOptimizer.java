@@ -30,6 +30,7 @@ import com.facebook.presto.spi.plan.PlanNodeIdAllocator;
 import com.facebook.presto.sql.planner.PlanVariableAllocator;
 import com.facebook.presto.sql.planner.RuleStatsRecorder;
 import com.facebook.presto.sql.planner.TypeProvider;
+import com.facebook.presto.sql.planner.iterative.rule.ExpressionRewriteRuleSet;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.google.common.collect.ImmutableList;
 import io.airlift.units.Duration;
@@ -74,6 +75,45 @@ public class IterativeOptimizer
         stats.registerAll(newRules);
     }
 
+    // *** Bao integration
+    private static String getRuleName(Rule<?> r)
+    {
+        String className;
+        ExpressionRewriteRuleSet.ExpressionRewriter rewriter = null;
+        if (r instanceof ExpressionRewriteRuleSet.ProjectExpressionRewrite) {
+            rewriter = ((ExpressionRewriteRuleSet.ProjectExpressionRewrite) r).getRewriter();
+        }
+        if (r instanceof ExpressionRewriteRuleSet.AggregationExpressionRewrite) {
+            rewriter = ((ExpressionRewriteRuleSet.AggregationExpressionRewrite) r).getRewriter();
+        }
+        if (r instanceof ExpressionRewriteRuleSet.ApplyExpressionRewrite) {
+            rewriter = ((ExpressionRewriteRuleSet.ApplyExpressionRewrite) r).getRewriter();
+        }
+        if (r instanceof ExpressionRewriteRuleSet.FilterExpressionRewrite) {
+            rewriter = ((ExpressionRewriteRuleSet.FilterExpressionRewrite) r).getRewriter();
+        }
+        if (r instanceof ExpressionRewriteRuleSet.JoinExpressionRewrite) {
+            rewriter = ((ExpressionRewriteRuleSet.JoinExpressionRewrite) r).getRewriter();
+        }
+        if (r instanceof ExpressionRewriteRuleSet.ValuesExpressionRewrite) {
+            rewriter = ((ExpressionRewriteRuleSet.ValuesExpressionRewrite) r).getRewriter();
+        }
+        if (rewriter == null) {
+            className = r.getClass().getSimpleName();
+        }
+        else {
+            className = rewriter.getClass().getSimpleName();
+        }
+        requireNonNull(className, "cannot find out rule class name");
+        int end = className.indexOf('$');
+        if (end != -1) {
+            className = className.substring(0, end);
+        }
+        assert (!className.equals(""));
+        return className;
+    }
+    // ***
+
     @Override
     public PlanNode optimize(PlanNode plan, Session session, TypeProvider types, PlanVariableAllocator variableAllocator, PlanNodeIdAllocator idAllocator, WarningCollector warningCollector)
     {
@@ -96,6 +136,7 @@ public class IterativeOptimizer
         if (!planChanged) {
             return plan;
         }
+        session.getOptimizerConfiguration().appliedCurrentOptimizer = true; // *** Bao integration
         return memo.extract();
     }
 
@@ -138,9 +179,18 @@ public class IterativeOptimizer
                     continue;
                 }
 
+                // *** Bao integration
+                // check if the rule is enabled; skip otherwise
+                String ruleName = getRuleName(rule);
+                if (!context.session.getOptimizerConfiguration().isRuleEnabled(ruleName)) {
+                    continue;
+                }
+                // ***
+
                 Rule.Result result = transform(node, rule, matcher, context);
 
                 if (result.getTransformedPlan().isPresent()) {
+                    context.session.getOptimizerConfiguration().registerRuleHit(ruleName); // *** Bao integration
                     node = context.memo.replace(group, result.getTransformedPlan().get(), rule.getClass().getName());
 
                     done = false;
@@ -172,6 +222,11 @@ public class IterativeOptimizer
             stats.recordFailure(rule);
             throw e;
         }
+        // *** Bao integration
+        if (!result.isEmpty()) {
+            context.session.getOptimizerConfiguration().appliedCurrentOptimizer = false;
+        }
+        // ***
         stats.record(rule, duration, !result.isEmpty());
         if (SystemSessionProperties.isVerboseRuntimeStatsEnabled(context.session)) {
             context.session.getRuntimeStats().addMetricValue(String.format("rule%sTimeNanos", rule.getClass().getSimpleName()), duration);

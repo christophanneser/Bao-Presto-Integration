@@ -54,11 +54,6 @@ import static java.util.Objects.requireNonNull;
 
 public class ExpressionRewriteRuleSet
 {
-    public interface ExpressionRewriter
-    {
-        Expression rewrite(Expression expression, Rule.Context context);
-    }
-
     private final ExpressionRewriter rewriter;
 
     public ExpressionRewriteRuleSet(ExpressionRewriter rewriter)
@@ -107,7 +102,12 @@ public class ExpressionRewriteRuleSet
         return new ApplyExpressionRewrite(rewriter);
     }
 
-    private static final class ProjectExpressionRewrite
+    public interface ExpressionRewriter
+    {
+        Expression rewrite(Expression expression, Rule.Context context);
+    }
+
+    public static final class ProjectExpressionRewrite
             implements Rule<ProjectNode>
     {
         private final ExpressionRewriter rewriter;
@@ -115,6 +115,11 @@ public class ExpressionRewriteRuleSet
         ProjectExpressionRewrite(ExpressionRewriter rewriter)
         {
             this.rewriter = rewriter;
+        }
+
+        public ExpressionRewriter getRewriter()
+        {
+            return rewriter;
         }
 
         @Override
@@ -134,7 +139,7 @@ public class ExpressionRewriteRuleSet
         }
     }
 
-    private static final class AggregationExpressionRewrite
+    public static final class AggregationExpressionRewrite
             implements Rule<AggregationNode>
     {
         private final ExpressionRewriter rewriter;
@@ -142,6 +147,11 @@ public class ExpressionRewriteRuleSet
         AggregationExpressionRewrite(ExpressionRewriter rewriter)
         {
             this.rewriter = rewriter;
+        }
+
+        public ExpressionRewriter getRewriter()
+        {
+            return rewriter;
         }
 
         @Override
@@ -194,7 +204,7 @@ public class ExpressionRewriteRuleSet
         }
     }
 
-    private static final class FilterExpressionRewrite
+    public static final class FilterExpressionRewrite
             implements Rule<FilterNode>
     {
         private final ExpressionRewriter rewriter;
@@ -202,6 +212,11 @@ public class ExpressionRewriteRuleSet
         FilterExpressionRewrite(ExpressionRewriter rewriter)
         {
             this.rewriter = rewriter;
+        }
+
+        public ExpressionRewriter getRewriter()
+        {
+            return rewriter;
         }
 
         @Override
@@ -227,7 +242,7 @@ public class ExpressionRewriteRuleSet
         }
     }
 
-    private static final class JoinExpressionRewrite
+    public static final class JoinExpressionRewrite
             implements Rule<JoinNode>
     {
         private final ExpressionRewriter rewriter;
@@ -235,6 +250,11 @@ public class ExpressionRewriteRuleSet
         JoinExpressionRewrite(ExpressionRewriter rewriter)
         {
             this.rewriter = rewriter;
+        }
+
+        public ExpressionRewriter getRewriter()
+        {
+            return rewriter;
         }
 
         @Override
@@ -266,7 +286,7 @@ public class ExpressionRewriteRuleSet
         }
     }
 
-    private static final class ValuesExpressionRewrite
+    public static final class ValuesExpressionRewrite
             implements Rule<ValuesNode>
     {
         private final ExpressionRewriter rewriter;
@@ -274,6 +294,11 @@ public class ExpressionRewriteRuleSet
         ValuesExpressionRewrite(ExpressionRewriter rewriter)
         {
             this.rewriter = rewriter;
+        }
+
+        public ExpressionRewriter getRewriter()
+        {
+            return rewriter;
         }
 
         @Override
@@ -312,7 +337,7 @@ public class ExpressionRewriteRuleSet
         }
     }
 
-    private static final class ApplyExpressionRewrite
+    public static final class ApplyExpressionRewrite
             implements Rule<ApplyNode>
     {
         private final ExpressionRewriter rewriter;
@@ -320,6 +345,11 @@ public class ExpressionRewriteRuleSet
         ApplyExpressionRewrite(ExpressionRewriter rewriter)
         {
             this.rewriter = rewriter;
+        }
+
+        public ExpressionRewriter getRewriter()
+        {
+            return rewriter;
         }
 
         @Override

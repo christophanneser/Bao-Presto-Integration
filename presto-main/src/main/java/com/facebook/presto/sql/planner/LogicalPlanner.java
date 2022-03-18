@@ -52,6 +52,7 @@ import com.facebook.presto.sql.analyzer.RelationType;
 import com.facebook.presto.sql.analyzer.Scope;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.StatisticsAggregationPlanner.TableStatisticAggregation;
+import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
 import com.facebook.presto.sql.planner.optimizations.PlanNodeSearcher;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.DeleteNode;
@@ -121,11 +122,6 @@ import static java.util.Objects.requireNonNull;
 
 public class LogicalPlanner
 {
-    public enum Stage
-    {
-        CREATED, OPTIMIZED, OPTIMIZED_AND_VALIDATED
-    }
-
     private final boolean explain;
     private final PlanNodeIdAllocator idAllocator;
     private final Session session;
@@ -179,6 +175,60 @@ public class LogicalPlanner
         this.warningCollector = requireNonNull(warningCollector, "warningCollector is null");
     }
 
+    private static List<ColumnMetadata> getOutputTableColumns(RelationPlan plan, Optional<List<Identifier>> columnAliases)
+    {
+        ImmutableList.Builder<ColumnMetadata> columns = ImmutableList.builder();
+        int aliasPosition = 0;
+        for (Field field : plan.getDescriptor().getVisibleFields()) {
+            String columnName = columnAliases.isPresent() ? columnAliases.get().get(aliasPosition).getValue() : field.getName().get();
+            columns.add(new ColumnMetadata(columnName, field.getType()));
+            aliasPosition++;
+        }
+        return columns.build();
+    }
+
+    private static Map<NodeRef<LambdaArgumentDeclaration>, VariableReferenceExpression> buildLambdaDeclarationToVariableMap(Analysis analysis, PlanVariableAllocator variableAllocator)
+    {
+        Map<NodeRef<LambdaArgumentDeclaration>, VariableReferenceExpression> resultMap = new LinkedHashMap<>();
+        for (Entry<NodeRef<Expression>, Type> entry : analysis.getTypes().entrySet()) {
+            if (!(entry.getKey().getNode() instanceof LambdaArgumentDeclaration)) {
+                continue;
+            }
+            NodeRef<LambdaArgumentDeclaration> lambdaArgumentDeclaration = NodeRef.of((LambdaArgumentDeclaration) entry.getKey().getNode());
+            if (resultMap.containsKey(lambdaArgumentDeclaration)) {
+                continue;
+            }
+            resultMap.put(lambdaArgumentDeclaration, variableAllocator.newVariable(lambdaArgumentDeclaration.getNode(), entry.getValue()));
+        }
+        return resultMap;
+    }
+
+    private static Optional<PartitioningScheme> getPartitioningSchemeForTableWrite(Optional<NewTableLayout> tableLayout, List<String> columnNames, List<VariableReferenceExpression> variables)
+    {
+        // todo this should be checked in analysis
+        tableLayout.ifPresent(layout -> {
+            if (!ImmutableSet.copyOf(columnNames).containsAll(layout.getPartitionColumns())) {
+                throw new PrestoException(NOT_SUPPORTED, "INSERT must write all distribution columns: " + layout.getPartitionColumns());
+            }
+        });
+
+        Optional<PartitioningScheme> partitioningScheme = Optional.empty();
+        if (tableLayout.isPresent()) {
+            List<VariableReferenceExpression> partitionFunctionArguments = new ArrayList<>();
+            tableLayout.get().getPartitionColumns().stream()
+                    .mapToInt(columnNames::indexOf)
+                    .mapToObj(variables::get)
+                    .forEach(partitionFunctionArguments::add);
+
+            List<VariableReferenceExpression> outputLayout = new ArrayList<>(variables);
+
+            partitioningScheme = Optional.of(new PartitioningScheme(
+                    Partitioning.create(tableLayout.get().getPartitioning(), partitionFunctionArguments),
+                    outputLayout));
+        }
+        return partitioningScheme;
+    }
+
     public Plan plan(Analysis analysis)
     {
         return plan(analysis, Stage.OPTIMIZED_AND_VALIDATED);
@@ -190,13 +240,37 @@ public class LogicalPlanner
 
         planChecker.validateIntermediatePlan(root, session, metadata, sqlParser, variableAllocator.getTypes(), warningCollector);
         boolean enableVerboseRuntimeStats = SystemSessionProperties.isVerboseRuntimeStatsEnabled(session);
+        // *** Bao integration
+        boolean getQuerySpan = SystemSessionProperties.isGetQuerySpan(session);
+        OptimizerConfiguration optimizerConfiguration = session.getOptimizerConfiguration();
+        int hash = optimizerConfiguration.hashPlan(root); // fixme implement custom hash functions for all operators
+        // ***
+
         if (stage.ordinal() >= Stage.OPTIMIZED.ordinal()) {
             for (PlanOptimizer optimizer : planOptimizers) {
+                // *** Bao integration
+                // check if optimizer is enabled; skip it otherwise
+                String optimizerName = optimizer.getClass().getSimpleName();
+                if (!optimizerConfiguration.isOptimizerEnabled(optimizerName)) {
+                    continue;
+                }
+
+                optimizerConfiguration.appliedCurrentOptimizer = false;
+                // ***
+
                 long start = System.nanoTime();
                 root = optimizer.optimize(root, session, variableAllocator.getTypes(), variableAllocator, idAllocator, warningCollector);
                 requireNonNull(root, format("%s returned a null plan", optimizer.getClass().getName()));
                 if (enableVerboseRuntimeStats) {
                     session.getRuntimeStats().addMetricValue(String.format("optimizer%sTimeNanos", optimizer.getClass().getSimpleName()), System.nanoTime() - start);
+                }
+                // todo track which optimizers actually modify the plan here ...
+                if (getQuerySpan) {
+                    int newHash = optimizerConfiguration.hashPlan(root);
+                    if (newHash != hash || optimizerConfiguration.appliedCurrentOptimizer) {
+                        optimizerConfiguration.effectiveOptimizers.add(optimizerName);
+                        hash = newHash;
+                    }
                 }
             }
         }
@@ -603,57 +677,8 @@ public class LogicalPlanner
         return new ConnectorTableMetadata(toSchemaTableName(table), columns, properties, comment);
     }
 
-    private static List<ColumnMetadata> getOutputTableColumns(RelationPlan plan, Optional<List<Identifier>> columnAliases)
+    public enum Stage
     {
-        ImmutableList.Builder<ColumnMetadata> columns = ImmutableList.builder();
-        int aliasPosition = 0;
-        for (Field field : plan.getDescriptor().getVisibleFields()) {
-            String columnName = columnAliases.isPresent() ? columnAliases.get().get(aliasPosition).getValue() : field.getName().get();
-            columns.add(new ColumnMetadata(columnName, field.getType()));
-            aliasPosition++;
-        }
-        return columns.build();
-    }
-
-    private static Map<NodeRef<LambdaArgumentDeclaration>, VariableReferenceExpression> buildLambdaDeclarationToVariableMap(Analysis analysis, PlanVariableAllocator variableAllocator)
-    {
-        Map<NodeRef<LambdaArgumentDeclaration>, VariableReferenceExpression> resultMap = new LinkedHashMap<>();
-        for (Entry<NodeRef<Expression>, Type> entry : analysis.getTypes().entrySet()) {
-            if (!(entry.getKey().getNode() instanceof LambdaArgumentDeclaration)) {
-                continue;
-            }
-            NodeRef<LambdaArgumentDeclaration> lambdaArgumentDeclaration = NodeRef.of((LambdaArgumentDeclaration) entry.getKey().getNode());
-            if (resultMap.containsKey(lambdaArgumentDeclaration)) {
-                continue;
-            }
-            resultMap.put(lambdaArgumentDeclaration, variableAllocator.newVariable(lambdaArgumentDeclaration.getNode(), entry.getValue()));
-        }
-        return resultMap;
-    }
-
-    private static Optional<PartitioningScheme> getPartitioningSchemeForTableWrite(Optional<NewTableLayout> tableLayout, List<String> columnNames, List<VariableReferenceExpression> variables)
-    {
-        // todo this should be checked in analysis
-        tableLayout.ifPresent(layout -> {
-            if (!ImmutableSet.copyOf(columnNames).containsAll(layout.getPartitionColumns())) {
-                throw new PrestoException(NOT_SUPPORTED, "INSERT must write all distribution columns: " + layout.getPartitionColumns());
-            }
-        });
-
-        Optional<PartitioningScheme> partitioningScheme = Optional.empty();
-        if (tableLayout.isPresent()) {
-            List<VariableReferenceExpression> partitionFunctionArguments = new ArrayList<>();
-            tableLayout.get().getPartitionColumns().stream()
-                    .mapToInt(columnNames::indexOf)
-                    .mapToObj(variables::get)
-                    .forEach(partitionFunctionArguments::add);
-
-            List<VariableReferenceExpression> outputLayout = new ArrayList<>(variables);
-
-            partitioningScheme = Optional.of(new PartitioningScheme(
-                    Partitioning.create(tableLayout.get().getPartitioning(), partitionFunctionArguments),
-                    outputLayout));
-        }
-        return partitioningScheme;
+        CREATED, OPTIMIZED, OPTIMIZED_AND_VALIDATED
     }
 }

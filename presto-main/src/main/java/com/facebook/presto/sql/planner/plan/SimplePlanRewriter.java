@@ -85,6 +85,10 @@ public abstract class SimplePlanRewriter<C>
         {
             PlanNode result = node.accept(nodeRewriter, new RewriteContext<>(nodeRewriter, userContext));
             verify(result != null, "nodeRewriter returned null for %s", node.getClass().getName());
+            // *** Bao integration
+            if (result != node) {
+                // fixme cannot access session context from here
+            }
 
             return result;
         }

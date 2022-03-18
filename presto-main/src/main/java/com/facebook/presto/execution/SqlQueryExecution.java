@@ -57,6 +57,8 @@ import com.facebook.presto.sql.planner.PlanOptimizers;
 import com.facebook.presto.sql.planner.PlanVariableAllocator;
 import com.facebook.presto.sql.planner.SplitSourceFactory;
 import com.facebook.presto.sql.planner.SubPlan;
+import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
+import com.facebook.presto.sql.planner.optimizations.OptimizerSpan;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.OutputNode;
 import com.facebook.presto.sql.planner.sanity.PlanChecker;
@@ -70,6 +72,7 @@ import org.joda.time.DateTime;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -78,6 +81,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import static com.facebook.presto.SystemSessionProperties.getBaoDriverSocket;
+import static com.facebook.presto.SystemSessionProperties.getMaxStageCountForEagerScheduling;
 import static com.facebook.presto.SystemSessionProperties.isSpoolingOutputBufferEnabled;
 import static com.facebook.presto.SystemSessionProperties.isUseLegacyScheduler;
 import static com.facebook.presto.common.RuntimeMetricName.FRAGMENT_PLAN_TIME_NANOS;
@@ -213,6 +218,22 @@ public class SqlQueryExecution
             this.remoteTaskFactory = new TrackingRemoteTaskFactory(requireNonNull(remoteTaskFactory, "remoteTaskFactory is null"), stateMachine);
             this.partialResultQueryManager = requireNonNull(partialResultQueryManager, "partialResultQueryManager is null");
         }
+    }
+
+    private static Set<ConnectorId> extractConnectors(Analysis analysis)
+    {
+        ImmutableSet.Builder<ConnectorId> connectors = ImmutableSet.builder();
+
+        for (TableHandle tableHandle : analysis.getTables()) {
+            connectors.add(tableHandle.getConnectorId());
+        }
+
+        if (analysis.getInsert().isPresent()) {
+            TableHandle target = analysis.getInsert().get().getTarget();
+            connectors.add(target.getConnectorId());
+        }
+
+        return connectors.build();
     }
 
     @Override
@@ -441,9 +462,65 @@ public class SqlQueryExecution
         // time analysis phase
         stateMachine.beginAnalysis();
 
+        Plan plan;
+
         // plan query
+        // *** Bao Integration
+        if (SystemSessionProperties.isGetQuerySpan(getSession())) {
+            OptimizerConfiguration optimizerConfiguration = getSession().getOptimizerConfiguration();
+            optimizerConfiguration.reset();
+
+            //OptimizerConfiguration.effectiveOptimizers = new HashSet<>();
+            //OptimizerConfiguration.effectiveRules = new HashSet<>();
+
+            Set<String> requiredRules = new HashSet<>();
+            Set<String> requiredOptimizer = new HashSet<>(planOptimizers.size());
+
+            // 1. get default effective rules and optimizers (stored in OptimizerConfig)
+            LogicalPlanner logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
+            plan = getSession().getRuntimeStats().profileNanos(
+                    LOGICAL_PLANNER_TIME_NANOS,
+                    () -> logicalPlanner.plan(analysis));
+            queryPlan.set(plan);
+
+            // initialize the optimizer span
+            OptimizerSpan span = new OptimizerSpan(optimizerConfiguration.effectiveOptimizers, optimizerConfiguration.effectiveRules);
+            while (span.hasNext()) {
+                // enable all optimizers and rules again
+                optimizerConfiguration.reset();
+
+                // disable effective rule or optimizer and track new effective optimizers
+                OptimizerSpan.EffectiveOptimizerPart optimizerPart = span.next();
+                switch (optimizerPart.type) {
+                    case OPTIMIZER: {
+                        optimizerConfiguration.disableOptimizer(optimizerPart.name);
+                        detectHitsInLogicalOptimization(requiredOptimizer, span, optimizerPart);
+                        break;
+                    }
+                    case RULE: {
+                        optimizerConfiguration.disableRule(optimizerPart.name);
+                        detectHitsInLogicalOptimization(requiredRules, span, optimizerPart);
+                    }
+                }
+            }
+
+            // send query span to backend
+            String baoSocket = getBaoDriverSocket(getSession());
+            // todo inject baoConnector
+            //baoConnector.exportEffectiveOptimizers(new ArrayList<>(OptimizerConfig.effectiveOptimizers));
+            //baoConnector.exportEffectiveRules(new ArrayList<>(OptimizerConfig.effectiveRules));
+            //baoConnector.exportRequiredOptimizers(new ArrayList<>(requiredOptimizer));
+            //baoConnector.exportRequiredRules(new ArrayList<>(requiredRules));
+
+            optimizerConfiguration.reset();
+            return null;
+        }
+        else {
+            // todo
+        }
+
         LogicalPlanner logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
-        Plan plan = getSession().getRuntimeStats().profileNanos(
+        plan = getSession().getRuntimeStats().profileNanos(
                 LOGICAL_PLANNER_TIME_NANOS,
                 () -> logicalPlanner.plan(analysis));
         queryPlan.set(plan);
@@ -470,20 +547,26 @@ public class SqlQueryExecution
         return new PlanRoot(fragmentedPlan, !explainAnalyze, extractConnectors(analysis));
     }
 
-    private static Set<ConnectorId> extractConnectors(Analysis analysis)
+    private void detectHitsInLogicalOptimization(Set<String> requiredOptimizersOrRules, OptimizerSpan span, OptimizerSpan.EffectiveOptimizerPart optimizerPart)
     {
-        ImmutableSet.Builder<ConnectorId> connectors = ImmutableSet.builder();
+        OptimizerConfiguration optimizerConfiguration = getSession().getOptimizerConfiguration();
+        LogicalPlanner logicalPlanner;
+        Plan plan;
+        logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
+        try {
+            plan = getSession().getRuntimeStats().profileNanos(
+                    LOGICAL_PLANNER_TIME_NANOS,
+                    () -> logicalPlanner.plan(analysis));
+            queryPlan.set(plan);
 
-        for (TableHandle tableHandle : analysis.getTables()) {
-            connectors.add(tableHandle.getConnectorId());
+            // track effective queries here in case query the plan is valid
+            span.addOptimizers(optimizerConfiguration.effectiveOptimizers);
+            span.addRules(optimizerConfiguration.effectiveRules);
         }
-
-        if (analysis.getInsert().isPresent()) {
-            TableHandle target = analysis.getInsert().get().getTarget();
-            connectors.add(target.getConnectorId());
+        catch (Exception e) {
+            // Invalid Rule Configuration found -> rule <i> is required!
+            requiredOptimizersOrRules.add(optimizerPart.name);
         }
-
-        return connectors.build();
     }
 
     private void planDistribution(PlanRoot plan)

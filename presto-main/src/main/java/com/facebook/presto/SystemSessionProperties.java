@@ -2101,6 +2101,11 @@ public final class SystemSessionProperties
         return session.getSystemProperty(QUERY_OPTIMIZATION_WITH_MATERIALIZED_VIEW_ENABLED, Boolean.class);
     }
 
+    public static boolean isGetQuerySpan(Session session)
+    {
+        return session.getSystemProperty(BAO_GET_QUERY_SPAN, Boolean.class);
+    }
+
     public static boolean isVerboseRuntimeStatsEnabled(Session session)
     {
         return session.getSystemProperty(VERBOSE_RUNTIME_STATS_ENABLED, Boolean.class);
@@ -2139,6 +2144,11 @@ public final class SystemSessionProperties
     public static double getHyperloglogStandardErrorWarningThreshold(Session session)
     {
         return session.getSystemProperty(HYPERLOGLOG_STANDARD_ERROR_WARNING_THRESHOLD, Double.class);
+    }
+
+    public static String getBaoDriverSocket(Session session)
+    {
+        return session.getSystemProperty(BAO_SOCKET, String.class);
     }
 
     public List<PropertyMetadata<?>> getSessionProperties()
