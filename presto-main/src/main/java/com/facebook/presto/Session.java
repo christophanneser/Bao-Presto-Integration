@@ -30,6 +30,7 @@ import com.facebook.presto.spi.security.SelectedRole;
 import com.facebook.presto.spi.session.ResourceEstimates;
 import com.facebook.presto.spi.session.SessionPropertyConfigurationManager.SystemSessionPropertyConfiguration;
 import com.facebook.presto.spi.tracing.Tracer;
+import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
 import com.facebook.presto.sql.tree.Execute;
 import com.facebook.presto.transaction.TransactionId;
 import com.facebook.presto.transaction.TransactionManager;
@@ -92,6 +93,7 @@ public final class Session
     private final AccessControlContext context;
     private final Optional<Tracer> tracer;
     private final Set<String> disabledOptimizers;
+    private final OptimizerConfiguration optimizerConfiguration;
 
     private final RuntimeStats runtimeStats = new RuntimeStats();
 
@@ -143,6 +145,7 @@ public final class Session
         this.preparedStatements = requireNonNull(preparedStatements, "preparedStatements is null");
         this.sessionFunctions = requireNonNull(sessionFunctions, "sessionFunctions is null");
         this.disabledOptimizers = requireNonNull(disabledOptimizers, "disabledOptimizers is null");
+        this.optimizerConfiguration = new OptimizerConfiguration();
 
         ImmutableMap.Builder<ConnectorId, Map<String, String>> catalogPropertiesBuilder = ImmutableMap.builder();
         connectorProperties.entrySet().stream()
