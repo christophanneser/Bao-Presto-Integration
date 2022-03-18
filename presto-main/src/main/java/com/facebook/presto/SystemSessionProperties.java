@@ -70,6 +70,17 @@ import static java.util.stream.Collectors.joining;
 
 public final class SystemSessionProperties
 {
+
+    // *** Bao integration
+    public static final String BAO_ENABLE = "bao";
+    public static final String BAO_EXPORT_GRAPHVIZ = "graphviz";
+    public static final String BAO_EXPORT_JSON = "json";
+    public static final String BAO_EXPORT_TIMES = "report_time";
+    public static final String BAO_GET_QUERY_SPAN = "get_query_span";
+    public static final String BAO_EXECUTE_QUERY = "execute_query";
+    public static final String BAO_SOCKET = "bao_socket";
+    // ***
+
     public static final String OPTIMIZE_HASH_GENERATION = "optimize_hash_generation";
     public static final String JOIN_DISTRIBUTION_TYPE = "join_distribution_type";
     public static final String JOIN_MAX_BROADCAST_TABLE_SIZE = "join_max_broadcast_table_size";
@@ -259,6 +270,43 @@ public final class SystemSessionProperties
             TracingConfig tracingConfig)
     {
         sessionProperties = ImmutableList.of(
+                // *** Bao integration
+                booleanProperty(
+                        BAO_ENABLE,
+                        "[BAO] Enable experimental Bao integration",
+                        false,
+                        false),
+                booleanProperty(
+                        BAO_EXPORT_TIMES,
+                        "[BAO] Presto exports the query stats via a socket",
+                        false,
+                        false),
+                booleanProperty(
+                        BAO_GET_QUERY_SPAN,
+                        "[BAO] Presto calculates the query span of a query and returns via socket",
+                        false,
+                        false),
+                booleanProperty(
+                        BAO_EXECUTE_QUERY,
+                        "[BAO] Define if Presto executes the query or not",
+                        false,
+                        false),
+                booleanProperty(
+                        BAO_EXPORT_JSON,
+                        "[BAO] Presto exports the query plan formatted as json file",
+                        false,
+                        false),
+                booleanProperty(
+                        BAO_EXPORT_GRAPHVIZ,
+                        "[BAO] Presto exports the query plan formatted as dot file",
+                        false,
+                        false),
+                stringProperty(
+                        BAO_SOCKET,
+                        "[BAO] Defines where Presto exports additional statistics, query plans, etc.",
+                        "localhost:9999",
+                        false),
+                // ***
                 stringProperty(
                         EXECUTION_POLICY,
                         "Policy used for scheduling query tasks",
@@ -1295,11 +1343,6 @@ public final class SystemSessionProperties
         return session.getSystemProperty(HASH_BASED_DISTINCT_LIMIT_THRESHOLD, Integer.class);
     }
 
-    public List<PropertyMetadata<?>> getSessionProperties()
-    {
-        return sessionProperties;
-    }
-
     public static String getExecutionPolicy(Session session)
     {
         return session.getSystemProperty(EXECUTION_POLICY, String.class);
@@ -2096,5 +2139,10 @@ public final class SystemSessionProperties
     public static double getHyperloglogStandardErrorWarningThreshold(Session session)
     {
         return session.getSystemProperty(HYPERLOGLOG_STANDARD_ERROR_WARNING_THRESHOLD, Double.class);
+    }
+
+    public List<PropertyMetadata<?>> getSessionProperties()
+    {
+        return sessionProperties;
     }
 }

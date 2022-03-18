@@ -94,7 +94,6 @@ public final class Session
     private final Optional<Tracer> tracer;
     private final Set<String> disabledOptimizers;
     private final OptimizerConfiguration optimizerConfiguration;
-
     private final RuntimeStats runtimeStats = new RuntimeStats();
 
     public Session(
