@@ -57,6 +57,7 @@ import com.facebook.presto.sql.planner.PlanOptimizers;
 import com.facebook.presto.sql.planner.PlanVariableAllocator;
 import com.facebook.presto.sql.planner.SplitSourceFactory;
 import com.facebook.presto.sql.planner.SubPlan;
+import com.facebook.presto.sql.planner.bao.BaoConnector;
 import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
 import com.facebook.presto.sql.planner.optimizations.OptimizerSpan;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
@@ -82,7 +83,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static com.facebook.presto.SystemSessionProperties.getBaoDriverSocket;
-import static com.facebook.presto.SystemSessionProperties.getMaxStageCountForEagerScheduling;
 import static com.facebook.presto.SystemSessionProperties.isSpoolingOutputBufferEnabled;
 import static com.facebook.presto.SystemSessionProperties.isUseLegacyScheduler;
 import static com.facebook.presto.common.RuntimeMetricName.FRAGMENT_PLAN_TIME_NANOS;
@@ -132,6 +132,7 @@ public class SqlQueryExecution
     private final AtomicReference<PlanVariableAllocator> variableAllocator = new AtomicReference<>();
     private final PartialResultQueryManager partialResultQueryManager;
     private final AtomicReference<Optional<ResourceGroupQueryLimits>> resourceGroupQueryLimits = new AtomicReference<>(Optional.empty());
+    private final BaoConnector baoConnector;
 
     private SqlQueryExecution(
             PreparedQuery preparedQuery,
@@ -157,7 +158,8 @@ public class SqlQueryExecution
             CostCalculator costCalculator,
             WarningCollector warningCollector,
             PlanChecker planChecker,
-            PartialResultQueryManager partialResultQueryManager)
+            PartialResultQueryManager partialResultQueryManager,
+            BaoConnector baoConnector)
     {
         try (SetThreadName ignored = new SetThreadName("Query-%s", stateMachine.getQueryId())) {
             this.slug = requireNonNull(slug, "slug is null");
@@ -178,6 +180,7 @@ public class SqlQueryExecution
             this.costCalculator = requireNonNull(costCalculator, "costCalculator is null");
             this.stateMachine = requireNonNull(stateMachine, "stateMachine is null");
             this.planChecker = requireNonNull(planChecker, "planChecker is null");
+            this.baoConnector = requireNonNull(baoConnector, "baoConnector is null");
 
             // analyze query
             requireNonNull(preparedQuery, "preparedQuery is null");
@@ -504,7 +507,7 @@ public class SqlQueryExecution
                 }
             }
 
-            // send query span to backend
+            // send query span tobackend
             String baoSocket = getBaoDriverSocket(getSession());
             // todo inject baoConnector
             //baoConnector.exportEffectiveOptimizers(new ArrayList<>(OptimizerConfig.effectiveOptimizers));
@@ -820,6 +823,7 @@ public class SqlQueryExecution
         private final CostCalculator costCalculator;
         private final PlanChecker planChecker;
         private final PartialResultQueryManager partialResultQueryManager;
+        private final BaoConnector baoConnector;
 
         @Inject
         SqlQueryExecutionFactory(QueryManagerConfig config,
@@ -840,7 +844,8 @@ public class SqlQueryExecution
                 StatsCalculator statsCalculator,
                 CostCalculator costCalculator,
                 PlanChecker planChecker,
-                PartialResultQueryManager partialResultQueryManager)
+                PartialResultQueryManager partialResultQueryManager,
+                BaoConnector baoConnector)
         {
             requireNonNull(config, "config is null");
             this.schedulerStats = requireNonNull(schedulerStats, "schedulerStats is null");
@@ -863,6 +868,7 @@ public class SqlQueryExecution
             this.costCalculator = requireNonNull(costCalculator, "costCalculator is null");
             this.planChecker = requireNonNull(planChecker, "planChecker is null");
             this.partialResultQueryManager = requireNonNull(partialResultQueryManager, "partialResultQueryManager is null");
+            this.baoConnector = requireNonNull(baoConnector, "baoConnector is null");
         }
 
         @Override
@@ -902,7 +908,8 @@ public class SqlQueryExecution
                     costCalculator,
                     warningCollector,
                     planChecker,
-                    partialResultQueryManager);
+                    partialResultQueryManager,
+                    baoConnector);
 
             return execution;
         }
