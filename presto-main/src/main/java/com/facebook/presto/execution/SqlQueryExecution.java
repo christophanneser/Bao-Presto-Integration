@@ -73,6 +73,7 @@ import org.joda.time.DateTime;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -158,8 +159,7 @@ public class SqlQueryExecution
             CostCalculator costCalculator,
             WarningCollector warningCollector,
             PlanChecker planChecker,
-            PartialResultQueryManager partialResultQueryManager,
-            BaoConnector baoConnector)
+            PartialResultQueryManager partialResultQueryManager)
     {
         try (SetThreadName ignored = new SetThreadName("Query-%s", stateMachine.getQueryId())) {
             this.slug = requireNonNull(slug, "slug is null");
@@ -180,7 +180,7 @@ public class SqlQueryExecution
             this.costCalculator = requireNonNull(costCalculator, "costCalculator is null");
             this.stateMachine = requireNonNull(stateMachine, "stateMachine is null");
             this.planChecker = requireNonNull(planChecker, "planChecker is null");
-            this.baoConnector = requireNonNull(baoConnector, "baoConnector is null");
+            this.baoConnector = new BaoConnector(stateMachine.getSession());
 
             // analyze query
             requireNonNull(preparedQuery, "preparedQuery is null");
@@ -508,12 +508,10 @@ public class SqlQueryExecution
             }
 
             // send query span tobackend
-            String baoSocket = getBaoDriverSocket(getSession());
-            // todo inject baoConnector
-            //baoConnector.exportEffectiveOptimizers(new ArrayList<>(OptimizerConfig.effectiveOptimizers));
-            //baoConnector.exportEffectiveRules(new ArrayList<>(OptimizerConfig.effectiveRules));
-            //baoConnector.exportRequiredOptimizers(new ArrayList<>(requiredOptimizer));
-            //baoConnector.exportRequiredRules(new ArrayList<>(requiredRules));
+            baoConnector.exportEffectiveOptimizers(new ArrayList<>(optimizerConfiguration.effectiveOptimizers));
+            baoConnector.exportEffectiveRules(new ArrayList<>(optimizerConfiguration.effectiveRules));
+            baoConnector.exportRequiredOptimizers(new ArrayList<>(requiredOptimizer));
+            baoConnector.exportRequiredRules(new ArrayList<>(requiredRules));
 
             optimizerConfiguration.reset();
             return null;
@@ -823,7 +821,6 @@ public class SqlQueryExecution
         private final CostCalculator costCalculator;
         private final PlanChecker planChecker;
         private final PartialResultQueryManager partialResultQueryManager;
-        private final BaoConnector baoConnector;
 
         @Inject
         SqlQueryExecutionFactory(QueryManagerConfig config,
@@ -844,8 +841,7 @@ public class SqlQueryExecution
                 StatsCalculator statsCalculator,
                 CostCalculator costCalculator,
                 PlanChecker planChecker,
-                PartialResultQueryManager partialResultQueryManager,
-                BaoConnector baoConnector)
+                PartialResultQueryManager partialResultQueryManager)
         {
             requireNonNull(config, "config is null");
             this.schedulerStats = requireNonNull(schedulerStats, "schedulerStats is null");
@@ -868,7 +864,6 @@ public class SqlQueryExecution
             this.costCalculator = requireNonNull(costCalculator, "costCalculator is null");
             this.planChecker = requireNonNull(planChecker, "planChecker is null");
             this.partialResultQueryManager = requireNonNull(partialResultQueryManager, "partialResultQueryManager is null");
-            this.baoConnector = requireNonNull(baoConnector, "baoConnector is null");
         }
 
         @Override
@@ -908,8 +903,7 @@ public class SqlQueryExecution
                     costCalculator,
                     warningCollector,
                     planChecker,
-                    partialResultQueryManager,
-                    baoConnector);
+                    partialResultQueryManager);
 
             return execution;
         }

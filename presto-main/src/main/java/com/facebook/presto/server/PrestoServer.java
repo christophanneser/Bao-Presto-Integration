@@ -48,7 +48,6 @@ import com.facebook.presto.server.security.PasswordAuthenticatorManager;
 import com.facebook.presto.server.security.ServerSecurityModule;
 import com.facebook.presto.sql.analyzer.FeaturesConfig;
 import com.facebook.presto.sql.parser.SqlParserOptions;
-import com.facebook.presto.sql.planner.bao.BaoModule;
 import com.facebook.presto.storage.TempStorageManager;
 import com.facebook.presto.storage.TempStorageModule;
 import com.facebook.presto.ttl.clusterttlprovidermanagers.ClusterTtlProviderManager;
@@ -108,7 +107,6 @@ public class PrestoServer
 
         ImmutableList.Builder<Module> modules = ImmutableList.builder();
         modules.add(
-                new BaoModule(),
                 new NodeModule(),
                 new DiscoveryModule(),
                 new HttpServerModule(),
