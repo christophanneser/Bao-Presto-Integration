@@ -18,7 +18,9 @@ import com.facebook.airlift.log.Logger;
 import com.facebook.airlift.node.NodeInfo;
 import com.facebook.airlift.stats.Distribution;
 import com.facebook.airlift.stats.Distribution.DistributionSnapshot;
+import com.facebook.presto.Session;
 import com.facebook.presto.SessionRepresentation;
+import com.facebook.presto.SystemSessionProperties;
 import com.facebook.presto.client.NodeVersion;
 import com.facebook.presto.common.RuntimeStats;
 import com.facebook.presto.eventlistener.EventListenerManager;
@@ -55,6 +57,7 @@ import com.facebook.presto.spi.eventlistener.QueryStatistics;
 import com.facebook.presto.spi.eventlistener.ResourceDistribution;
 import com.facebook.presto.spi.eventlistener.StageStatistics;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupId;
+import com.facebook.presto.sql.planner.bao.BaoConnector;
 import com.facebook.presto.transaction.TransactionId;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -184,7 +187,7 @@ public class QueryMonitor
         return ImmutableMap.copyOf(mergedProperties);
     }
 
-    private static void logQueryTimeline(QueryInfo queryInfo)
+    private static void logQueryTimeline(QueryInfo queryInfo, BaoConnector baoConnector, Session session)
     {
         try {
             QueryStats queryStats = queryInfo.getQueryStats();
@@ -235,10 +238,15 @@ public class QueryMonitor
             long running = max(lastTaskEndTime - firstTaskStartTime, 0);
             long finishing = max(queryEndTime.getMillis() - lastTaskEndTime, 0);
 
-
-            /*
             // *** Bao integration
-            if (SystemSessionProperties.isExportTimes(queryInfo.getSession())) {
+            long cpuTime = queryStats.getTotalCpuTime().toMillis();
+            long rawInputDatasize = queryStats.getRawInputDataSize().toBytes();
+
+            boolean exportTimes = Boolean.parseBoolean(queryInfo.getSession().getSystemProperties().get(SystemSessionProperties.BAO_EXPORT_TIMES));
+            if (exportTimes && baoConnector != null && session != null) {
+                requireNonNull(baoConnector, "baoConnector must not be null");
+                requireNonNull(session, "session must not be null");
+
                 String json = String.format(
                         "{\"query_id\": \"%s\"," +
                                 "\"elapsed\": %s," +
@@ -249,11 +257,10 @@ public class QueryMonitor
                                 " \"cpu\": %s," +
                                 " \"plan_hash\": %s," +
                                 "\"input_data_size\": %s}",
-                        queryInfo.getQueryId(), elapsed, planning, scheduling, running, finishing, cpuTime, OptimizerConfig.planHash, rawInputDatasize);
+                        queryInfo.getQueryId(), elapsed, planning, scheduling, running, finishing, cpuTime, session.getOptimizerConfiguration().planHash, rawInputDatasize);
                 baoConnector.exportExecutionTimeInfo(json);
             }
             // ***
-             */
 
             logQueryTimeline(
                     queryInfo.getQueryId(),
@@ -449,7 +456,7 @@ public class QueryMonitor
         logQueryTimeline(queryInfo);
     }
 
-    public void queryCompletedEvent(QueryInfo queryInfo)
+    public void queryCompletedEvent(QueryInfo queryInfo, BaoConnector baoConnector, Session session)
     {
         QueryStats queryStats = queryInfo.getQueryStats();
         ImmutableList.Builder<StageStatistics> stageStatisticsBuilder = ImmutableList.builder();
@@ -476,7 +483,7 @@ public class QueryMonitor
                         createOperatorStatistics(queryInfo),
                         queryInfo.getExpandedQuery()));
 
-        logQueryTimeline(queryInfo);
+        logQueryTimeline(queryInfo, baoConnector, session);
     }
 
     private QueryMetadata createQueryMetadata(QueryInfo queryInfo)

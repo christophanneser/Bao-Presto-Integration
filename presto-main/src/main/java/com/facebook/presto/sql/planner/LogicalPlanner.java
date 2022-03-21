@@ -243,7 +243,8 @@ public class LogicalPlanner
         // *** Bao integration
         boolean getQuerySpan = SystemSessionProperties.isGetQuerySpan(session);
         OptimizerConfiguration optimizerConfiguration = session.getOptimizerConfiguration();
-        int hash = optimizerConfiguration.hashPlan(root); // fixme implement custom hash functions for all operators
+        // fixme implement custom hash functions for all operators
+        int hash = optimizerConfiguration.hashPlan(root);
         // ***
 
         if (stage.ordinal() >= Stage.OPTIMIZED.ordinal()) {

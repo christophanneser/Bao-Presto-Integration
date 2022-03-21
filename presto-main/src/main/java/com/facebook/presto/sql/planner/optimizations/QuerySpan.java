@@ -6,7 +6,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 // Stores the optimizer span
-public class OptimizerSpan
+public class QuerySpan
 {
     // remember all seen optimizers and rules
     private final Set<String> seenOptimizers;
@@ -17,7 +17,7 @@ public class OptimizerSpan
     private final Queue<String> effectiveRules;
 
     // initialize using the default effective rules/optimizers
-    public OptimizerSpan(Set<String> effectiveOptimizers, Set<String> effectiveRules)
+    public QuerySpan(Set<String> effectiveOptimizers, Set<String> effectiveRules)
     {
         this.seenOptimizers = new HashSet<>(effectiveOptimizers);
         this.seenRules = new HashSet<>(effectiveRules);

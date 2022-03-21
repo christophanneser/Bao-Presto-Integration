@@ -59,7 +59,7 @@ import com.facebook.presto.sql.planner.SplitSourceFactory;
 import com.facebook.presto.sql.planner.SubPlan;
 import com.facebook.presto.sql.planner.bao.BaoConnector;
 import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
-import com.facebook.presto.sql.planner.optimizations.OptimizerSpan;
+import com.facebook.presto.sql.planner.optimizations.QuerySpan;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.OutputNode;
 import com.facebook.presto.sql.planner.planPrinter.PlanPrinter;
@@ -482,7 +482,7 @@ public class SqlQueryExecution
             optimizerConfiguration.reset();
 
             Set<String> requiredRules = new HashSet<>();
-            Set<String> requiredOptimizer = new HashSet<>(planOptimizers.size());
+            Set<String> requiredOptimizers = new HashSet<>(planOptimizers.size());
 
             // 1. get default effective rules and optimizers (stored in OptimizerConfig)
             LogicalPlanner logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
@@ -492,17 +492,17 @@ public class SqlQueryExecution
             queryPlan.set(plan);
 
             // initialize the optimizer span
-            OptimizerSpan span = new OptimizerSpan(optimizerConfiguration.effectiveOptimizers, optimizerConfiguration.effectiveRules);
+            QuerySpan span = new QuerySpan(optimizerConfiguration.effectiveOptimizers, optimizerConfiguration.effectiveRules);
             while (span.hasNext()) {
                 // enable all optimizers and rules again
                 optimizerConfiguration.reset();
 
                 // disable effective rule or optimizer and track new effective optimizers
-                OptimizerSpan.EffectiveOptimizerPart optimizerPart = span.next();
+                QuerySpan.EffectiveOptimizerPart optimizerPart = span.next();
                 switch (optimizerPart.type) {
                     case OPTIMIZER: {
                         optimizerConfiguration.disableOptimizer(optimizerPart.name);
-                        detectHitsInLogicalOptimization(requiredOptimizer, span, optimizerPart);
+                        detectHitsInLogicalOptimization(requiredOptimizers, span, optimizerPart);
                         break;
                     }
                     case RULE: {
@@ -515,7 +515,7 @@ public class SqlQueryExecution
             // send query span to driver
             baoConnector.exportEffectiveOptimizers(new ArrayList<>(optimizerConfiguration.effectiveOptimizers));
             baoConnector.exportEffectiveRules(new ArrayList<>(optimizerConfiguration.effectiveRules));
-            baoConnector.exportRequiredOptimizers(new ArrayList<>(requiredOptimizer));
+            baoConnector.exportRequiredOptimizers(new ArrayList<>(requiredOptimizers));
             baoConnector.exportRequiredRules(new ArrayList<>(requiredRules));
 
             optimizerConfiguration.reset();
@@ -530,6 +530,8 @@ public class SqlQueryExecution
 
         // *** Bao integration
         // export logical graphviz plan
+        Session session = getSession();
+        Map<String, String> config = session.getSystemProperties();
         if (isExportGraphviz(getSession())) {
             String logicalGraphivz = PlanPrinter.graphvizLogicalPlan(plan.getRoot(), plan.getTypes(), stateMachine.getSession(), metadata.getFunctionAndTypeManager());
             baoConnector.exportGraphivzPlan("logical:" + logicalGraphivz);
@@ -581,7 +583,7 @@ public class SqlQueryExecution
         return new PlanRoot(fragmentedPlan, !explainAnalyze, extractConnectors(analysis));
     }
 
-    private void detectHitsInLogicalOptimization(Set<String> requiredOptimizersOrRules, OptimizerSpan span, OptimizerSpan.EffectiveOptimizerPart optimizerPart)
+    private void detectHitsInLogicalOptimization(Set<String> requiredOptimizersOrRules, QuerySpan optimizerSpan, QuerySpan.EffectiveOptimizerPart optimizerPart)
     {
         OptimizerConfiguration optimizerConfiguration = getSession().getOptimizerConfiguration();
         LogicalPlanner logicalPlanner;
@@ -594,8 +596,8 @@ public class SqlQueryExecution
             queryPlan.set(plan);
 
             // track effective queries here in case query the plan is valid
-            span.addOptimizers(optimizerConfiguration.effectiveOptimizers);
-            span.addRules(optimizerConfiguration.effectiveRules);
+            optimizerSpan.addOptimizers(optimizerConfiguration.effectiveOptimizers);
+            optimizerSpan.addRules(optimizerConfiguration.effectiveRules);
         }
         catch (Exception e) {
             // Invalid Rule Configuration found -> rule <i> is required!

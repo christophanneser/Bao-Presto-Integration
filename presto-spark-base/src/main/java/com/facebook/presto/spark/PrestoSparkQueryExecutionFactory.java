@@ -494,7 +494,7 @@ public class PrestoSparkQueryExecutionFactory
                         queryStateTimer,
                         Optional.empty(),
                         warningCollector);
-                queryMonitor.queryCompletedEvent(queryInfo);
+                queryMonitor.queryCompletedEvent(queryInfo, null, null);
                 if (queryStatusInfoOutputLocation.isPresent()) {
                     PrestoSparkQueryStatusInfo prestoSparkQueryStatusInfo = createPrestoSparkQueryInfo(
                             queryInfo,
@@ -1277,7 +1277,7 @@ public class PrestoSparkQueryExecutionFactory
                     Optional.of(stageInfo),
                     warningCollector);
 
-            queryMonitor.queryCompletedEvent(queryInfo);
+            queryMonitor.queryCompletedEvent(queryInfo, null, null);
             if (queryStatusInfoOutputLocation.isPresent()) {
                 PrestoSparkQueryStatusInfo prestoSparkQueryStatusInfo = createPrestoSparkQueryInfo(
                         queryInfo,

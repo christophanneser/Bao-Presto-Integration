@@ -29,6 +29,7 @@ import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.QueryId;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupQueryLimits;
 import com.facebook.presto.sql.planner.Plan;
+import com.facebook.presto.sql.planner.bao.BaoConnector;
 import com.facebook.presto.version.EmbedVersion;
 import com.google.common.collect.Ordering;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -254,10 +255,12 @@ public class SqlQueryManager
         queryExecution.addFinalQueryInfoListener(finalQueryInfo -> {
             try {
                 if (queryExecution instanceof SqlQueryExecution) {
-                    //todo queryMonitor.queryCompletedEvent(finalQueryInfo, ((SqlQueryExecution)queryExecution).getBaoConnector());
+                    BaoConnector baoConnector = ((SqlQueryExecution) queryExecution).getBaoConnector();
+                    Session session = queryExecution.getSession();
+                    queryMonitor.queryCompletedEvent(finalQueryInfo, baoConnector, session);
                 }
                 else {
-                    queryMonitor.queryCompletedEvent(finalQueryInfo);
+                    queryMonitor.queryCompletedEvent(finalQueryInfo, null, null);
                 }
             }
             finally {

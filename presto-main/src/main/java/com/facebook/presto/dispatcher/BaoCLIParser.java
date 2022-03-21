@@ -13,8 +13,8 @@
  */
 package com.facebook.presto.dispatcher;
 
-import com.facebook.presto.Session;
 import com.facebook.airlift.log.Logger;
+import com.facebook.presto.Session;
 import com.facebook.presto.server.PrestoServer;
 
 import java.util.Arrays;
@@ -28,36 +28,8 @@ public class BaoCLIParser
 
     private static boolean toggleOptimization(String query, Logger log, Session session)
     {
-        Pattern pattern = Pattern.compile("(set)\\s+([a-zA-Z_]*)\\s*=\\s*(on|off)", Pattern.CASE_INSENSITIVE);
+        Pattern pattern = Pattern.compile("(disable)\\s+([a-zA-Z,]*)\\s*(.*)", Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(query);
-        if (matcher.matches()) {
-            String setting = matcher.group(2);
-            boolean enable = matcher.group(3).equals("on");
-            switch (setting.toLowerCase(Locale.getDefault())) {
-                case "graphviz":
-                    log.info((enable ? "ENABLE" : "DISABLE") + " graphviz exports");
-                    break;
-                case "json":
-                    log.info((enable ? "ENABLE" : "DISABLE") + " JSON exports");
-                    break;
-                case "report_time":
-//                    QueryMonitor.sendRecordedTimesToDriver = enable;
-                    log.info((enable ? "ENABLE" : "DISABLE") + " sending recorded times to driver");
-                    break;
-                case "bao":
-                    log.info((enable ? "ENABLE" : "DISABLE") + " BAO");
-                    break;
-                case "get_query_span":
-                    log.info((enable ? "ENABLE" : "DISABLE") + " track query span");
-                    break;
-                case "execute_query":
-                    log.info((enable ? "ENABLE" : "DISABLE") + " query execution");
-                    break;
-            }
-            return true;
-        }
-        pattern = Pattern.compile("(disable)\\s+([a-zA-Z,]*)\\s*(.*)", Pattern.CASE_INSENSITIVE);
-        matcher = pattern.matcher(query);
         if (matcher.matches()) {
             String setting = matcher.group(2);
             String[] values = matcher.group(3).split(",");
