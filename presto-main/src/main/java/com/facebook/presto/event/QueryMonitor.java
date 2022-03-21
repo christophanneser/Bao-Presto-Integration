@@ -119,6 +119,253 @@ public class QueryMonitor
         this.maxJsonLimit = toIntExact(requireNonNull(config, "config is null").getMaxOutputStageJsonSize().toBytes());
     }
 
+    private static QueryIOMetadata getQueryIOMetadata(QueryInfo queryInfo)
+    {
+        ImmutableList.Builder<QueryInputMetadata> inputs = ImmutableList.builder();
+        for (Input input : queryInfo.getInputs()) {
+            inputs.add(new QueryInputMetadata(
+                    input.getConnectorId().getCatalogName(),
+                    input.getSchema(),
+                    input.getTable(),
+                    input.getColumns().stream()
+                            .map(Column::getName).collect(Collectors.toList()),
+                    input.getConnectorInfo(),
+                    input.getStatistics()));
+        }
+
+        Optional<QueryOutputMetadata> output = Optional.empty();
+        if (queryInfo.getOutput().isPresent()) {
+            Optional<TableFinishInfo> tableFinishInfo = queryInfo.getQueryStats().getOperatorSummaries().stream()
+                    .map(OperatorStats::getInfo)
+                    .filter(TableFinishInfo.class::isInstance)
+                    .map(TableFinishInfo.class::cast)
+                    .findFirst();
+
+            output = Optional.of(
+                    new QueryOutputMetadata(
+                            queryInfo.getOutput().get().getConnectorId().getCatalogName(),
+                            queryInfo.getOutput().get().getSchema(),
+                            queryInfo.getOutput().get().getTable(),
+                            tableFinishInfo.map(TableFinishInfo::getSerializedConnectorOutputMetadata),
+                            tableFinishInfo.map(TableFinishInfo::isJsonLengthLimitExceeded)));
+        }
+        return new QueryIOMetadata(inputs.build(), output);
+    }
+
+    private static Optional<TaskInfo> findFailedTask(StageInfo stageInfo)
+    {
+        for (StageInfo subStage : stageInfo.getSubStages()) {
+            Optional<TaskInfo> task = findFailedTask(subStage);
+            if (task.isPresent()) {
+                return task;
+            }
+        }
+        return stageInfo.getLatestAttemptExecutionInfo().getTasks().stream()
+                .filter(taskInfo -> taskInfo.getTaskStatus().getState() == TaskState.FAILED)
+                .findFirst();
+    }
+
+    private static Map<String, String> mergeSessionAndCatalogProperties(SessionRepresentation session)
+    {
+        Map<String, String> mergedProperties = new LinkedHashMap<>(session.getSystemProperties());
+
+        // Either processed or unprocessed catalog properties, but not both.  Instead of trying to enforces this while
+        // firing events, allow both to be set and if there is a duplicate favor the processed properties.
+        for (Map.Entry<String, Map<String, String>> catalogEntry : session.getUnprocessedCatalogProperties().entrySet()) {
+            for (Map.Entry<String, String> entry : catalogEntry.getValue().entrySet()) {
+                mergedProperties.put(catalogEntry.getKey() + "." + entry.getKey(), entry.getValue());
+            }
+        }
+        for (Map.Entry<ConnectorId, Map<String, String>> catalogEntry : session.getCatalogProperties().entrySet()) {
+            for (Map.Entry<String, String> entry : catalogEntry.getValue().entrySet()) {
+                mergedProperties.put(catalogEntry.getKey().getCatalogName() + "." + entry.getKey(), entry.getValue());
+            }
+        }
+        return ImmutableMap.copyOf(mergedProperties);
+    }
+
+    private static void logQueryTimeline(QueryInfo queryInfo)
+    {
+        try {
+            QueryStats queryStats = queryInfo.getQueryStats();
+            DateTime queryStartTime = queryStats.getCreateTime();
+            DateTime queryEndTime = queryStats.getEndTime();
+
+            // query didn't finish cleanly
+            if (queryStartTime == null || queryEndTime == null) {
+                return;
+            }
+
+            // planning duration -- start to end of planning
+            long planning = queryStats.getTotalPlanningTime().toMillis();
+
+            List<StageInfo> stages = getAllStages(queryInfo.getOutputStage());
+            // long lastSchedulingCompletion = 0;
+            long firstTaskStartTime = queryEndTime.getMillis();
+            long lastTaskStartTime = queryStartTime.getMillis() + planning;
+            long lastTaskEndTime = queryStartTime.getMillis() + planning;
+            for (StageInfo stage : stages) {
+                // only consider leaf stages
+                if (!stage.getSubStages().isEmpty()) {
+                    continue;
+                }
+
+                for (TaskInfo taskInfo : stage.getLatestAttemptExecutionInfo().getTasks()) {
+                    TaskStats taskStats = taskInfo.getStats();
+
+                    DateTime firstStartTime = taskStats.getFirstStartTime();
+                    if (firstStartTime != null) {
+                        firstTaskStartTime = Math.min(firstStartTime.getMillis(), firstTaskStartTime);
+                    }
+
+                    DateTime lastStartTime = taskStats.getLastStartTime();
+                    if (lastStartTime != null) {
+                        lastTaskStartTime = max(lastStartTime.getMillis(), lastTaskStartTime);
+                    }
+
+                    DateTime endTime = taskStats.getEndTime();
+                    if (endTime != null) {
+                        lastTaskEndTime = max(endTime.getMillis(), lastTaskEndTime);
+                    }
+                }
+            }
+
+            long elapsed = max(queryEndTime.getMillis() - queryStartTime.getMillis(), 0);
+            long scheduling = max(firstTaskStartTime - queryStartTime.getMillis() - planning, 0);
+            long running = max(lastTaskEndTime - firstTaskStartTime, 0);
+            long finishing = max(queryEndTime.getMillis() - lastTaskEndTime, 0);
+
+
+            /*
+            // *** Bao integration
+            if (SystemSessionProperties.isExportTimes(queryInfo.getSession())) {
+                String json = String.format(
+                        "{\"query_id\": \"%s\"," +
+                                "\"elapsed\": %s," +
+                                "\"planning\": %s," +
+                                " \"scheduling\": %s," +
+                                "\"running\": %s," +
+                                " \"finishing\": %s," +
+                                " \"cpu\": %s," +
+                                " \"plan_hash\": %s," +
+                                "\"input_data_size\": %s}",
+                        queryInfo.getQueryId(), elapsed, planning, scheduling, running, finishing, cpuTime, OptimizerConfig.planHash, rawInputDatasize);
+                baoConnector.exportExecutionTimeInfo(json);
+            }
+            // ***
+             */
+
+            logQueryTimeline(
+                    queryInfo.getQueryId(),
+                    queryInfo.getSession().getTransactionId().map(TransactionId::toString).orElse(""),
+                    elapsed,
+                    planning,
+                    scheduling,
+                    running,
+                    finishing,
+                    queryStartTime,
+                    queryEndTime);
+        }
+        catch (Exception e) {
+            log.error(e, "Error logging query timeline");
+        }
+    }
+
+    private static void logQueryTimeline(BasicQueryInfo queryInfo)
+    {
+        DateTime queryStartTime = queryInfo.getQueryStats().getCreateTime();
+        DateTime queryEndTime = queryInfo.getQueryStats().getEndTime();
+
+        // query didn't finish cleanly
+        if (queryStartTime == null || queryEndTime == null) {
+            return;
+        }
+
+        long elapsed = max(queryEndTime.getMillis() - queryStartTime.getMillis(), 0);
+
+        logQueryTimeline(
+                queryInfo.getQueryId(),
+                queryInfo.getSession().getTransactionId().map(TransactionId::toString).orElse(""),
+                elapsed,
+                elapsed,
+                0,
+                0,
+                0,
+                queryStartTime,
+                queryEndTime);
+    }
+
+    private static void logQueryTimeline(
+            QueryId queryId,
+            String transactionId,
+            long elapsedMillis,
+            long planningMillis,
+            long schedulingMillis,
+            long runningMillis,
+            long finishingMillis,
+            DateTime queryStartTime,
+            DateTime queryEndTime)
+    {
+        log.info("TIMELINE: Query %s :: Transaction:[%s] :: elapsed %sms :: planning %sms :: scheduling %sms :: running %sms :: finishing %sms :: begin %s :: end %s",
+                queryId,
+                transactionId,
+                elapsedMillis,
+                planningMillis,
+                schedulingMillis,
+                runningMillis,
+                finishingMillis,
+                queryStartTime,
+                queryEndTime);
+    }
+
+    private static ResourceDistribution createResourceDistribution(
+            DistributionSnapshot distributionSnapshot)
+    {
+        return new ResourceDistribution(
+                distributionSnapshot.getP25(),
+                distributionSnapshot.getP50(),
+                distributionSnapshot.getP75(),
+                distributionSnapshot.getP90(),
+                distributionSnapshot.getP95(),
+                distributionSnapshot.getP99(),
+                distributionSnapshot.getMin(),
+                distributionSnapshot.getMax(),
+                (long) distributionSnapshot.getTotal(),
+                distributionSnapshot.getTotal() / distributionSnapshot.getCount());
+    }
+
+    private static void computeStageStatistics(
+            StageInfo stageInfo,
+            ImmutableList.Builder<StageStatistics> stageStatisticsBuilder)
+    {
+        Distribution cpuDistribution = new Distribution();
+        Distribution memoryDistribution = new Distribution();
+
+        StageExecutionInfo executionInfo = stageInfo.getLatestAttemptExecutionInfo();
+
+        for (TaskInfo taskInfo : executionInfo.getTasks()) {
+            cpuDistribution.add(NANOSECONDS.toMillis(taskInfo.getStats().getTotalCpuTimeInNanos()));
+            memoryDistribution.add(taskInfo.getStats().getPeakTotalMemoryInBytes());
+        }
+
+        stageStatisticsBuilder.add(new StageStatistics(
+                stageInfo.getStageId().getId(),
+                executionInfo.getStats().getGcInfo().getStageExecutionId(),
+                executionInfo.getTasks().size(),
+                executionInfo.getStats().getTotalScheduledTime(),
+                executionInfo.getStats().getTotalCpuTime(),
+                executionInfo.getStats().getRetriedCpuTime(),
+                executionInfo.getStats().getTotalBlockedTime(),
+                executionInfo.getStats().getRawInputDataSize(),
+                executionInfo.getStats().getProcessedInputDataSize(),
+                executionInfo.getStats().getPhysicalWrittenDataSize(),
+                executionInfo.getStats().getGcInfo(),
+                createResourceDistribution(cpuDistribution.snapshot()),
+                createResourceDistribution(memoryDistribution.snapshot())));
+
+        stageInfo.getSubStages().forEach(subStage -> computeStageStatistics(subStage, stageStatisticsBuilder));
+    }
+
     public void queryCreatedEvent(BasicQueryInfo queryInfo)
     {
         eventListenerManager.queryCreated(
@@ -386,39 +633,6 @@ public class QueryMonitor
         return Optional.empty();
     }
 
-    private static QueryIOMetadata getQueryIOMetadata(QueryInfo queryInfo)
-    {
-        ImmutableList.Builder<QueryInputMetadata> inputs = ImmutableList.builder();
-        for (Input input : queryInfo.getInputs()) {
-            inputs.add(new QueryInputMetadata(
-                    input.getConnectorId().getCatalogName(),
-                    input.getSchema(),
-                    input.getTable(),
-                    input.getColumns().stream()
-                            .map(Column::getName).collect(Collectors.toList()),
-                    input.getConnectorInfo(),
-                    input.getStatistics()));
-        }
-
-        Optional<QueryOutputMetadata> output = Optional.empty();
-        if (queryInfo.getOutput().isPresent()) {
-            Optional<TableFinishInfo> tableFinishInfo = queryInfo.getQueryStats().getOperatorSummaries().stream()
-                    .map(OperatorStats::getInfo)
-                    .filter(TableFinishInfo.class::isInstance)
-                    .map(TableFinishInfo.class::cast)
-                    .findFirst();
-
-            output = Optional.of(
-                    new QueryOutputMetadata(
-                            queryInfo.getOutput().get().getConnectorId().getCatalogName(),
-                            queryInfo.getOutput().get().getSchema(),
-                            queryInfo.getOutput().get().getTable(),
-                            tableFinishInfo.map(TableFinishInfo::getSerializedConnectorOutputMetadata),
-                            tableFinishInfo.map(TableFinishInfo::isJsonLengthLimitExceeded)));
-        }
-        return new QueryIOMetadata(inputs.build(), output);
-    }
-
     private Optional<QueryFailureInfo> createQueryFailureInfo(ExecutionFailureInfo failureInfo, Optional<StageInfo> outputStage)
     {
         if (failureInfo == null) {
@@ -434,199 +648,5 @@ public class QueryMonitor
                 failedTask.map(task -> task.getTaskId().toString()),
                 failedTask.map(task -> task.getTaskStatus().getSelf().getHost()),
                 executionFailureInfoCodec.toJson(failureInfo)));
-    }
-
-    private static Optional<TaskInfo> findFailedTask(StageInfo stageInfo)
-    {
-        for (StageInfo subStage : stageInfo.getSubStages()) {
-            Optional<TaskInfo> task = findFailedTask(subStage);
-            if (task.isPresent()) {
-                return task;
-            }
-        }
-        return stageInfo.getLatestAttemptExecutionInfo().getTasks().stream()
-                .filter(taskInfo -> taskInfo.getTaskStatus().getState() == TaskState.FAILED)
-                .findFirst();
-    }
-
-    private static Map<String, String> mergeSessionAndCatalogProperties(SessionRepresentation session)
-    {
-        Map<String, String> mergedProperties = new LinkedHashMap<>(session.getSystemProperties());
-
-        // Either processed or unprocessed catalog properties, but not both.  Instead of trying to enforces this while
-        // firing events, allow both to be set and if there is a duplicate favor the processed properties.
-        for (Map.Entry<String, Map<String, String>> catalogEntry : session.getUnprocessedCatalogProperties().entrySet()) {
-            for (Map.Entry<String, String> entry : catalogEntry.getValue().entrySet()) {
-                mergedProperties.put(catalogEntry.getKey() + "." + entry.getKey(), entry.getValue());
-            }
-        }
-        for (Map.Entry<ConnectorId, Map<String, String>> catalogEntry : session.getCatalogProperties().entrySet()) {
-            for (Map.Entry<String, String> entry : catalogEntry.getValue().entrySet()) {
-                mergedProperties.put(catalogEntry.getKey().getCatalogName() + "." + entry.getKey(), entry.getValue());
-            }
-        }
-        return ImmutableMap.copyOf(mergedProperties);
-    }
-
-    private static void logQueryTimeline(QueryInfo queryInfo)
-    {
-        try {
-            QueryStats queryStats = queryInfo.getQueryStats();
-            DateTime queryStartTime = queryStats.getCreateTime();
-            DateTime queryEndTime = queryStats.getEndTime();
-
-            // query didn't finish cleanly
-            if (queryStartTime == null || queryEndTime == null) {
-                return;
-            }
-
-            // planning duration -- start to end of planning
-            long planning = queryStats.getTotalPlanningTime().toMillis();
-
-            List<StageInfo> stages = getAllStages(queryInfo.getOutputStage());
-            // long lastSchedulingCompletion = 0;
-            long firstTaskStartTime = queryEndTime.getMillis();
-            long lastTaskStartTime = queryStartTime.getMillis() + planning;
-            long lastTaskEndTime = queryStartTime.getMillis() + planning;
-            for (StageInfo stage : stages) {
-                // only consider leaf stages
-                if (!stage.getSubStages().isEmpty()) {
-                    continue;
-                }
-
-                for (TaskInfo taskInfo : stage.getLatestAttemptExecutionInfo().getTasks()) {
-                    TaskStats taskStats = taskInfo.getStats();
-
-                    DateTime firstStartTime = taskStats.getFirstStartTime();
-                    if (firstStartTime != null) {
-                        firstTaskStartTime = Math.min(firstStartTime.getMillis(), firstTaskStartTime);
-                    }
-
-                    DateTime lastStartTime = taskStats.getLastStartTime();
-                    if (lastStartTime != null) {
-                        lastTaskStartTime = max(lastStartTime.getMillis(), lastTaskStartTime);
-                    }
-
-                    DateTime endTime = taskStats.getEndTime();
-                    if (endTime != null) {
-                        lastTaskEndTime = max(endTime.getMillis(), lastTaskEndTime);
-                    }
-                }
-            }
-
-            long elapsed = max(queryEndTime.getMillis() - queryStartTime.getMillis(), 0);
-            long scheduling = max(firstTaskStartTime - queryStartTime.getMillis() - planning, 0);
-            long running = max(lastTaskEndTime - firstTaskStartTime, 0);
-            long finishing = max(queryEndTime.getMillis() - lastTaskEndTime, 0);
-
-            logQueryTimeline(
-                    queryInfo.getQueryId(),
-                    queryInfo.getSession().getTransactionId().map(TransactionId::toString).orElse(""),
-                    elapsed,
-                    planning,
-                    scheduling,
-                    running,
-                    finishing,
-                    queryStartTime,
-                    queryEndTime);
-        }
-        catch (Exception e) {
-            log.error(e, "Error logging query timeline");
-        }
-    }
-
-    private static void logQueryTimeline(BasicQueryInfo queryInfo)
-    {
-        DateTime queryStartTime = queryInfo.getQueryStats().getCreateTime();
-        DateTime queryEndTime = queryInfo.getQueryStats().getEndTime();
-
-        // query didn't finish cleanly
-        if (queryStartTime == null || queryEndTime == null) {
-            return;
-        }
-
-        long elapsed = max(queryEndTime.getMillis() - queryStartTime.getMillis(), 0);
-
-        logQueryTimeline(
-                queryInfo.getQueryId(),
-                queryInfo.getSession().getTransactionId().map(TransactionId::toString).orElse(""),
-                elapsed,
-                elapsed,
-                0,
-                0,
-                0,
-                queryStartTime,
-                queryEndTime);
-    }
-
-    private static void logQueryTimeline(
-            QueryId queryId,
-            String transactionId,
-            long elapsedMillis,
-            long planningMillis,
-            long schedulingMillis,
-            long runningMillis,
-            long finishingMillis,
-            DateTime queryStartTime,
-            DateTime queryEndTime)
-    {
-        log.info("TIMELINE: Query %s :: Transaction:[%s] :: elapsed %sms :: planning %sms :: scheduling %sms :: running %sms :: finishing %sms :: begin %s :: end %s",
-                queryId,
-                transactionId,
-                elapsedMillis,
-                planningMillis,
-                schedulingMillis,
-                runningMillis,
-                finishingMillis,
-                queryStartTime,
-                queryEndTime);
-    }
-
-    private static ResourceDistribution createResourceDistribution(
-            DistributionSnapshot distributionSnapshot)
-    {
-        return new ResourceDistribution(
-                distributionSnapshot.getP25(),
-                distributionSnapshot.getP50(),
-                distributionSnapshot.getP75(),
-                distributionSnapshot.getP90(),
-                distributionSnapshot.getP95(),
-                distributionSnapshot.getP99(),
-                distributionSnapshot.getMin(),
-                distributionSnapshot.getMax(),
-                (long) distributionSnapshot.getTotal(),
-                distributionSnapshot.getTotal() / distributionSnapshot.getCount());
-    }
-
-    private static void computeStageStatistics(
-            StageInfo stageInfo,
-            ImmutableList.Builder<StageStatistics> stageStatisticsBuilder)
-    {
-        Distribution cpuDistribution = new Distribution();
-        Distribution memoryDistribution = new Distribution();
-
-        StageExecutionInfo executionInfo = stageInfo.getLatestAttemptExecutionInfo();
-
-        for (TaskInfo taskInfo : executionInfo.getTasks()) {
-            cpuDistribution.add(NANOSECONDS.toMillis(taskInfo.getStats().getTotalCpuTimeInNanos()));
-            memoryDistribution.add(taskInfo.getStats().getPeakTotalMemoryInBytes());
-        }
-
-        stageStatisticsBuilder.add(new StageStatistics(
-                stageInfo.getStageId().getId(),
-                executionInfo.getStats().getGcInfo().getStageExecutionId(),
-                executionInfo.getTasks().size(),
-                executionInfo.getStats().getTotalScheduledTime(),
-                executionInfo.getStats().getTotalCpuTime(),
-                executionInfo.getStats().getRetriedCpuTime(),
-                executionInfo.getStats().getTotalBlockedTime(),
-                executionInfo.getStats().getRawInputDataSize(),
-                executionInfo.getStats().getProcessedInputDataSize(),
-                executionInfo.getStats().getPhysicalWrittenDataSize(),
-                executionInfo.getStats().getGcInfo(),
-                createResourceDistribution(cpuDistribution.snapshot()),
-                createResourceDistribution(memoryDistribution.snapshot())));
-
-        stageInfo.getSubStages().forEach(subStage -> computeStageStatistics(subStage, stageStatisticsBuilder));
     }
 }

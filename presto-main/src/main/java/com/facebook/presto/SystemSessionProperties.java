@@ -289,7 +289,7 @@ public final class SystemSessionProperties
                 booleanProperty(
                         BAO_EXECUTE_QUERY,
                         "[BAO] Define if Presto executes the query or not",
-                        false,
+                        true,
                         false),
                 booleanProperty(
                         BAO_EXPORT_JSON,
@@ -2104,6 +2104,26 @@ public final class SystemSessionProperties
     public static boolean isGetQuerySpan(Session session)
     {
         return session.getSystemProperty(BAO_GET_QUERY_SPAN, Boolean.class);
+    }
+
+    public static boolean isExportGraphviz(Session session)
+    {
+        return session.getSystemProperty(BAO_EXPORT_GRAPHVIZ, Boolean.class);
+    }
+
+    public static boolean isExportJSON(Session session)
+    {
+        return session.getSystemProperty(BAO_EXPORT_JSON, Boolean.class);
+    }
+
+    public static boolean isExecuteQuery(Session session)
+    {
+        return session.getSystemProperty(BAO_EXECUTE_QUERY, Boolean.class);
+    }
+
+    public static boolean isExportTimes(Session session)
+    {
+        return session.getSystemProperty(BAO_EXPORT_TIMES, Boolean.class);
     }
 
     public static boolean isVerboseRuntimeStatsEnabled(Session session)

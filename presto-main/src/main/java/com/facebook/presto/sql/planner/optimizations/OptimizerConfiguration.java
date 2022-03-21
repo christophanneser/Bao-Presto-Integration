@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.sql.planner.optimizations;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.sql.planner.plan.InternalPlanVisitor;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -20,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,17 +32,23 @@ import java.util.Set;
  */
 public class OptimizerConfiguration
 {
-    public boolean appliedCurrentOptimizer;
 
+    private static final Logger log = Logger.get(OptimizerConfiguration.class);
+    public boolean appliedCurrentOptimizer;
     // Store the final hash of the current query plan here
     public int planHash;
-
     // en/disable optimizers and rules
     public Map<String, Boolean> optimizersEnabled = createConfigMapFromList(optimizerNames());
     public Map<String, Boolean> rulesEnabled = createConfigMapFromList(ruleNames());
     // track optimizers and rules if they are required or effective
     public Set<String> effectiveOptimizers;
     public Set<String> effectiveRules;
+
+    public OptimizerConfiguration()
+    {
+        effectiveOptimizers = new HashSet<>();
+        effectiveRules = new HashSet<>();
+    }
 
     public static Map<String, Integer> createRulesHitsMap()
     {
@@ -58,6 +66,7 @@ public class OptimizerConfiguration
         opts.add("ApplyConnectorOptimization");
         opts.add("CheckSubqueryNodesAreRewritten");
         opts.add("HashGenerationOptimizer");
+        opts.add("HashBasedPartialDistinctLimit");
         opts.add("ImplementIntersectAndExceptAsUnion");
         opts.add("IndexJoinOptimizer");
         opts.add("IterativeOptimizer"); // <-- will always be enabled!
@@ -149,7 +158,7 @@ public class OptimizerConfiguration
         rules.add("PickTableLayoutForPredicate");
         rules.add("PickTableLayoutWithoutPredicate");
         rules.add("PlanNodeWithCost");
-        rules.add("PlanRemotePojections");
+        rules.add("PlanRemoteProjections");
         rules.add("PlanWithConsumedDynamicFilters");
         rules.add("PreconditionRules");
         rules.add("ProjectExpressionRewrite");
@@ -214,6 +223,7 @@ public class OptimizerConfiguration
         rules.add("Rewriter");
         rules.add("RowExpressionRewriteRuleSet");
         rules.add("RuntimeReorderJoinSides");
+        rules.add("SimplifyCardinalityMap");
         rules.add("SimplifyCountOverConstant");
         rules.add("SimplifyExpressions");
         rules.add("SimplifyRowExpressions");
@@ -250,17 +260,26 @@ public class OptimizerConfiguration
 
     public Boolean isOptimizerEnabled(String optimizer)
     {
+        if (!optimizersEnabled.containsKey(optimizer)) {
+            log.error("optimizer %s does not exist in OptimizerConfiguration", optimizer);
+            return true;
+        }
         return optimizersEnabled.get(optimizer);
     }
 
     public Boolean isRuleEnabled(String rule)
     {
+        if (!rulesEnabled.containsKey(rule)) {
+            log.error("rule %s does not exist in OptimizerConfiguration", rule);
+            return true;
+        }
         return rulesEnabled.get(rule);
     }
 
     public void registerRuleHit(String ruleName)
     {
         //if (SqlQueryExecution.getQuerySpan) { todo
+
         assert (effectiveRules != null);
         effectiveRules.add(ruleName);
         //}
@@ -268,6 +287,8 @@ public class OptimizerConfiguration
 
     public void reset()
     {
+        effectiveOptimizers = new HashSet<>();
+        effectiveRules = new HashSet<>();
         optimizersEnabled = createConfigMapFromList(optimizerNames());
         rulesEnabled = createConfigMapFromList(ruleNames());
     }
@@ -288,7 +309,6 @@ public class OptimizerConfiguration
         if (!optimizersEnabled.containsKey(optimizer)) {
             System.out.println("ERROR: optimizer not found:" + optimizer);
         }
-        assert (optimizersEnabled.containsKey(optimizer));
         optimizersEnabled.replace(optimizer, false);
     }
 
@@ -298,7 +318,6 @@ public class OptimizerConfiguration
         if (!rulesEnabled.containsKey(rule)) {
             System.out.println("ERROR: rule not found:" + rule);
         }
-        assert (rulesEnabled.containsKey(rule));
         rulesEnabled.replace(rule, false);
     }
 

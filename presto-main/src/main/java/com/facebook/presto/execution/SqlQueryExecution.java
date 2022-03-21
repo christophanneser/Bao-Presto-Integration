@@ -62,6 +62,7 @@ import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
 import com.facebook.presto.sql.planner.optimizations.OptimizerSpan;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.OutputNode;
+import com.facebook.presto.sql.planner.planPrinter.PlanPrinter;
 import com.facebook.presto.sql.planner.sanity.PlanChecker;
 import com.facebook.presto.sql.tree.Explain;
 import com.google.common.collect.ImmutableSet;
@@ -83,7 +84,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import static com.facebook.presto.SystemSessionProperties.getBaoDriverSocket;
+import static com.facebook.presto.SystemSessionProperties.isExecuteQuery;
+import static com.facebook.presto.SystemSessionProperties.isExportGraphviz;
+import static com.facebook.presto.SystemSessionProperties.isExportJSON;
 import static com.facebook.presto.SystemSessionProperties.isSpoolingOutputBufferEnabled;
 import static com.facebook.presto.SystemSessionProperties.isUseLegacyScheduler;
 import static com.facebook.presto.common.RuntimeMetricName.FRAGMENT_PLAN_TIME_NANOS;
@@ -444,6 +447,11 @@ public class SqlQueryExecution
         return stateMachine.getSession();
     }
 
+    public BaoConnector getBaoConnector()
+    {
+        return baoConnector;
+    }
+
     @Override
     public void addFinalQueryInfoListener(StateChangeListener<QueryInfo> stateChangeListener)
     {
@@ -472,9 +480,6 @@ public class SqlQueryExecution
         if (SystemSessionProperties.isGetQuerySpan(getSession())) {
             OptimizerConfiguration optimizerConfiguration = getSession().getOptimizerConfiguration();
             optimizerConfiguration.reset();
-
-            //OptimizerConfiguration.effectiveOptimizers = new HashSet<>();
-            //OptimizerConfiguration.effectiveRules = new HashSet<>();
 
             Set<String> requiredRules = new HashSet<>();
             Set<String> requiredOptimizer = new HashSet<>(planOptimizers.size());
@@ -507,7 +512,7 @@ public class SqlQueryExecution
                 }
             }
 
-            // send query span tobackend
+            // send query span to driver
             baoConnector.exportEffectiveOptimizers(new ArrayList<>(optimizerConfiguration.effectiveOptimizers));
             baoConnector.exportEffectiveRules(new ArrayList<>(optimizerConfiguration.effectiveRules));
             baoConnector.exportRequiredOptimizers(new ArrayList<>(requiredOptimizer));
@@ -516,15 +521,20 @@ public class SqlQueryExecution
             optimizerConfiguration.reset();
             return null;
         }
-        else {
-            // todo
-        }
-
+        // Regular query execution
         LogicalPlanner logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
         plan = getSession().getRuntimeStats().profileNanos(
                 LOGICAL_PLANNER_TIME_NANOS,
                 () -> logicalPlanner.plan(analysis));
         queryPlan.set(plan);
+
+        // *** Bao integration
+        // export logical graphviz plan
+        if (isExportGraphviz(getSession())) {
+            String logicalGraphivz = PlanPrinter.graphvizLogicalPlan(plan.getRoot(), plan.getTypes(), stateMachine.getSession(), metadata.getFunctionAndTypeManager());
+            baoConnector.exportGraphivzPlan("logical:" + logicalGraphivz);
+        }
+        // ***
 
         // extract inputs
         List<Input> inputs = new InputExtractor(metadata, stateMachine.getSession()).extractInputs(plan.getRoot());
@@ -544,7 +554,30 @@ public class SqlQueryExecution
         // record analysis time
         stateMachine.endAnalysis();
 
+        // keep the hash of the final plan
+        String json = PlanPrinter.jsonLogicalPlan(plan.getRoot(), plan.getTypes(), metadata.getFunctionAndTypeManager(), plan.getStatsAndCosts(), stateMachine.getSession());
+        getSession().getOptimizerConfiguration().planHash = json.hashCode();
+
+        // export fragmented graphviz plan
+        if (isExportGraphviz(getSession())) {
+            String fragmentedGraphviz = PlanPrinter.graphvizDistributedPlan(fragmentedPlan, stateMachine.getSession(), metadata.getFunctionAndTypeManager());
+            baoConnector.exportGraphivzPlan("fragmented:" + fragmentedGraphviz);
+        }
+
+        // export logical graphviz plan
+        if (isExportJSON(getSession())) {
+            baoConnector.exportJsonPlan("logical:" + json);
+
+            String fragmentedJson = PlanPrinter.jsonFragmentPlan(fragmentedPlan.getFragment().getRoot(), fragmentedPlan.getFragment().getVariables(), metadata.getFunctionAndTypeManager(), getSession());
+            baoConnector.exportJsonPlan("fragmented:" + fragmentedJson);
+        }
+
         boolean explainAnalyze = analysis.getStatement() instanceof Explain && ((Explain) analysis.getStatement()).isAnalyze();
+
+        if (!isExecuteQuery(getSession())) {
+            return null;
+        }
+
         return new PlanRoot(fragmentedPlan, !explainAnalyze, extractConnectors(analysis));
     }
 

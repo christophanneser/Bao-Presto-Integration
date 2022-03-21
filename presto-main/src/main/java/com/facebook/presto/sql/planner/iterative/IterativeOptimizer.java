@@ -190,7 +190,9 @@ public class IterativeOptimizer
                 Rule.Result result = transform(node, rule, matcher, context);
 
                 if (result.getTransformedPlan().isPresent()) {
-                    context.session.getOptimizerConfiguration().registerRuleHit(ruleName); // *** Bao integration
+                    if (SystemSessionProperties.isGetQuerySpan(context.session)) {
+                        context.session.getOptimizerConfiguration().registerRuleHit(ruleName); // *** Bao integration
+                    }
                     node = context.memo.replace(group, result.getTransformedPlan().get(), rule.getClass().getName());
 
                     done = false;

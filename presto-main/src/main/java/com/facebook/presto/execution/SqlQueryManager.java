@@ -253,7 +253,12 @@ public class SqlQueryManager
 
         queryExecution.addFinalQueryInfoListener(finalQueryInfo -> {
             try {
-                queryMonitor.queryCompletedEvent(finalQueryInfo);
+                if (queryExecution instanceof SqlQueryExecution) {
+                    //todo queryMonitor.queryCompletedEvent(finalQueryInfo, ((SqlQueryExecution)queryExecution).getBaoConnector());
+                }
+                else {
+                    queryMonitor.queryCompletedEvent(finalQueryInfo);
+                }
             }
             finally {
                 // execution MUST be added to the expiration queue or there will be a leak
