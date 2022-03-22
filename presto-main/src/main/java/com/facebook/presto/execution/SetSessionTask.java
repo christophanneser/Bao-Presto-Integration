@@ -14,6 +14,7 @@
 package com.facebook.presto.execution;
 
 import com.facebook.presto.Session;
+import com.facebook.presto.SystemSessionProperties;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.security.AccessControl;
@@ -28,6 +29,8 @@ import com.facebook.presto.sql.tree.SetSession;
 import com.facebook.presto.transaction.TransactionManager;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static com.facebook.presto.metadata.SessionPropertyManager.evaluatePropertyValue;
@@ -89,6 +92,23 @@ public class SetSessionTask
         propertyMetadata.decode(objectValue);
 
         stateMachine.addSetSessionProperties(propertyName.toString(), value);
+
+        // *** Bao integration
+        String property = parts.get(0);
+        if (property.equals(SystemSessionProperties.BAO_DISABLED_OPTIMIZERS) || property.equals(SystemSessionProperties.BAO_DISABLED_RULES)) {
+            List<String> values = value.isEmpty() ? new ArrayList<>() : Arrays.asList(value.split(","));
+            switch (property) {
+                case SystemSessionProperties.BAO_DISABLED_OPTIMIZERS:
+                    session.getOptimizerConfiguration().disableOptimizers(values);
+                    break;
+                case SystemSessionProperties.BAO_DISABLED_RULES:
+                    session.getOptimizerConfiguration().disableRules(values);
+                    break;
+                default:
+                    throw new PrestoException(StandardErrorCode.INVALID_SESSION_PROPERTY, "could not disable optimizers/rules via session property");
+            }
+        }
+        // ***
 
         return immediateFuture(null);
     }

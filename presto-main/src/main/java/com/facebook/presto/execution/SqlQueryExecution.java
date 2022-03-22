@@ -394,6 +394,11 @@ public class SqlQueryExecution
                 // analyze query
                 PlanRoot plan = analyzeQuery();
 
+                if (plan == null) {
+                    stateMachine.transitionToFinishing();
+                    return;
+                }
+                // todo catch if plan is null -> then do not execute it
                 metadata.beginQuery(getSession(), plan.getConnectors());
 
                 // plan distribution of query

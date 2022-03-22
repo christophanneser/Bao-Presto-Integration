@@ -79,6 +79,8 @@ public final class SystemSessionProperties
     public static final String BAO_GET_QUERY_SPAN = "get_query_span";
     public static final String BAO_EXECUTE_QUERY = "execute_query";
     public static final String BAO_SOCKET = "bao_socket";
+    public static final String BAO_DISABLED_OPTIMIZERS = "bao_disable_optimizers";
+    public static final String BAO_DISABLED_RULES = "bao_disable_rules";
     // ***
 
     public static final String OPTIMIZE_HASH_GENERATION = "optimize_hash_generation";
@@ -306,6 +308,18 @@ public final class SystemSessionProperties
                         "[BAO] Defines where Presto exports additional statistics, query plans, etc.",
                         "localhost:9999",
                         false),
+                stringProperty(
+                        BAO_DISABLED_OPTIMIZERS,
+                        "[BAO] Disable certain query optimizers",
+                        "",
+                        false
+                ),
+                stringProperty(
+                        BAO_DISABLED_RULES,
+                        "[BAO] Disable certain query optimizer rewrite rules",
+                        "",
+                        false
+                ),
                 // ***
                 stringProperty(
                         EXECUTION_POLICY,

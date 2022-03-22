@@ -32,7 +32,6 @@ import java.util.Set;
  */
 public class OptimizerConfiguration
 {
-
     private static final Logger log = Logger.get(OptimizerConfiguration.class);
     public boolean appliedCurrentOptimizer;
     // Store the final hash of the current query plan here
@@ -295,8 +294,7 @@ public class OptimizerConfiguration
 
     public void disableOptimizers(List<String> optimizers)
     {
-        reset();
-        System.out.println("disable optimizers ...");
+        optimizersEnabled = createConfigMapFromList(optimizerNames());
         for (String optimizer : optimizers) {
             assert (optimizersEnabled.containsKey(optimizer));
             optimizersEnabled.replace(optimizer, false);
@@ -305,7 +303,7 @@ public class OptimizerConfiguration
 
     public void disableOptimizer(String optimizer)
     {
-        reset();
+        optimizersEnabled = createConfigMapFromList(optimizerNames());
         if (!optimizersEnabled.containsKey(optimizer)) {
             System.out.println("ERROR: optimizer not found:" + optimizer);
         }
@@ -314,7 +312,7 @@ public class OptimizerConfiguration
 
     public void disableRule(String rule)
     {
-        reset();
+        rulesEnabled = createConfigMapFromList(ruleNames());
         if (!rulesEnabled.containsKey(rule)) {
             System.out.println("ERROR: rule not found:" + rule);
         }
@@ -323,7 +321,7 @@ public class OptimizerConfiguration
 
     public void disableRules(List<String> rules)
     {
-        reset();
+        rulesEnabled = createConfigMapFromList(ruleNames());
         for (String rule : rules) {
             assert (rulesEnabled.containsKey(rule));
             rulesEnabled.replace(rule, false);

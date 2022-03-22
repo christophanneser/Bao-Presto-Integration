@@ -184,10 +184,6 @@ public class DispatchManager
             // decode session
             session = sessionSupplier.createSession(queryId, sessionContext);
 
-            // *** Bao integration
-            boolean isBaoCommand = BaoCLIParser.parseCLI(query, session);
-            // ***
-
             // prepare query
             WarningCollector warningCollector = warningCollectorFactory.create(getWarningHandlingLevel(session));
             preparedQuery = queryPreparer.prepareQuery(session, query, warningCollector);
@@ -219,12 +215,6 @@ public class DispatchManager
                     queryType,
                     warningCollector,
                     (dq) -> resourceGroupManager.submit(preparedQuery.getStatement(), dq, selectionContext, queryExecutor));
-
-            // *** Bao integration
-            if (isBaoCommand) {
-                dispatchQuery.cancel();
-            }
-            // ***
 
             boolean queryAdded = queryCreated(dispatchQuery);
             if (queryAdded && !dispatchQuery.isDone()) {
