@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.facebook.presto.SystemSessionProperties.getBaoDriverSocket;
 
-/// The BaoConnector talks to the benchmark driver
+/// The BaoConnector talks to the benchmark driver; it sends query plans, query spans, and execution stats to the driver;
 public class BaoConnector
 {
     private final Logger log;
@@ -52,14 +52,13 @@ public class BaoConnector
         return Integer.parseInt(result[1]);
     }
 
-
     private void sendData(String data)
     {
         String connection = getBaoDriverSocket(session);
         String host = parseHost(connection);
         int port = parsePort(connection);
-
-        for (int i = 0; i < 30; i++) {
+        int maxRetries = 30;
+        for (int i = 0; i < maxRetries; i++) {
             try {
                 TimeUnit.MILLISECONDS.sleep(100);
 
@@ -132,27 +131,4 @@ public class BaoConnector
     {
         sendData("json:rules:required:" + JSONArray.toJSONString(requiredRules));
     }
-
-    //private boolean sendData(byte[] data)
-    //{
-    //    try {
-    //        Socket socket = new Socket("localhost", 9381);
-    //        OutputStream outputStream = socket.getOutputStream();
-    //        outputStream.write(data);
-    //    }
-    //    catch (UnknownHostException e) {
-    //        log.error("Cannot connect to BAO server");
-    //    }
-    //    catch (IOException ioException) {
-    //        return false;
-    //    }
-    //    return true;
-    //}
-
-    //public void sendPlan(String json)
-    //{
-    //    if (sendData(json.getBytes(StandardCharsets.UTF_8))) {
-    //        log.info("Sent json plan to BAO server");
-    //    }
-    //}
 }

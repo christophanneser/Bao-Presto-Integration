@@ -79,8 +79,8 @@ public final class SystemSessionProperties
     public static final String BAO_GET_QUERY_SPAN = "get_query_span";
     public static final String BAO_EXECUTE_QUERY = "execute_query";
     public static final String BAO_SOCKET = "bao_socket";
-    public static final String BAO_DISABLED_OPTIMIZERS = "bao_disable_optimizers";
-    public static final String BAO_DISABLED_RULES = "bao_disable_rules";
+    public static final String BAO_DISABLED_OPTIMIZERS = "bao_disabled_optimizers";
+    public static final String BAO_DISABLED_RULES = "bao_disabled_rules";
     // ***
 
     public static final String OPTIMIZE_HASH_GENERATION = "optimize_hash_generation";
