@@ -53,13 +53,10 @@ import com.facebook.presto.sql.analyzer.Scope;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.StatisticsAggregationPlanner.TableStatisticAggregation;
 import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
-import com.facebook.presto.sql.planner.optimizations.PlanNodeSearcher;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.DeleteNode;
 import com.facebook.presto.sql.planner.plan.ExplainAnalyzeNode;
-import com.facebook.presto.sql.planner.plan.JoinNode;
 import com.facebook.presto.sql.planner.plan.OutputNode;
-import com.facebook.presto.sql.planner.plan.SemiJoinNode;
 import com.facebook.presto.sql.planner.plan.StatisticAggregations;
 import com.facebook.presto.sql.planner.plan.StatisticsWriterNode;
 import com.facebook.presto.sql.planner.plan.TableFinishNode;
@@ -94,7 +91,6 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.facebook.presto.SystemSessionProperties.isPrintStatsForNonJoinQuery;
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.common.type.VarbinaryType.VARBINARY;
 import static com.facebook.presto.metadata.MetadataUtil.toSchemaTableName;
@@ -287,14 +283,10 @@ public class LogicalPlanner
 
     private StatsAndCosts computeStats(PlanNode root, TypeProvider types)
     {
-        if (explain || isPrintStatsForNonJoinQuery(session) ||
-                PlanNodeSearcher.searchFrom(root).where(node ->
-                        (node instanceof JoinNode) || (node instanceof SemiJoinNode)).matches()) {
-            StatsProvider statsProvider = new CachingStatsProvider(statsCalculator, session, types);
-            CostProvider costProvider = new CachingCostProvider(costCalculator, statsProvider, Optional.empty(), session);
-            return StatsAndCosts.create(root, statsProvider, costProvider);
-        }
-        return StatsAndCosts.empty();
+        // *** Bao integration: always add cost estimates as the are required for Bao
+        StatsProvider statsProvider = new CachingStatsProvider(statsCalculator, session, types);
+        CostProvider costProvider = new CachingCostProvider(costCalculator, statsProvider, Optional.empty(), session);
+        return StatsAndCosts.create(root, statsProvider, costProvider);
     }
 
     public PlanNode planStatement(Analysis analysis, Statement statement)
