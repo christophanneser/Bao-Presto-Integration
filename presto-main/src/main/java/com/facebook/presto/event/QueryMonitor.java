@@ -122,39 +122,6 @@ public class QueryMonitor
         this.maxJsonLimit = toIntExact(requireNonNull(config, "config is null").getMaxOutputStageJsonSize().toBytes());
     }
 
-    private static QueryIOMetadata getQueryIOMetadata(QueryInfo queryInfo)
-    {
-        ImmutableList.Builder<QueryInputMetadata> inputs = ImmutableList.builder();
-        for (Input input : queryInfo.getInputs()) {
-            inputs.add(new QueryInputMetadata(
-                    input.getConnectorId().getCatalogName(),
-                    input.getSchema(),
-                    input.getTable(),
-                    input.getColumns().stream()
-                            .map(Column::getName).collect(Collectors.toList()),
-                    input.getConnectorInfo(),
-                    input.getStatistics()));
-        }
-
-        Optional<QueryOutputMetadata> output = Optional.empty();
-        if (queryInfo.getOutput().isPresent()) {
-            Optional<TableFinishInfo> tableFinishInfo = queryInfo.getQueryStats().getOperatorSummaries().stream()
-                    .map(OperatorStats::getInfo)
-                    .filter(TableFinishInfo.class::isInstance)
-                    .map(TableFinishInfo.class::cast)
-                    .findFirst();
-
-            output = Optional.of(
-                    new QueryOutputMetadata(
-                            queryInfo.getOutput().get().getConnectorId().getCatalogName(),
-                            queryInfo.getOutput().get().getSchema(),
-                            queryInfo.getOutput().get().getTable(),
-                            tableFinishInfo.map(TableFinishInfo::getSerializedConnectorOutputMetadata),
-                            tableFinishInfo.map(TableFinishInfo::isJsonLengthLimitExceeded)));
-        }
-        return new QueryIOMetadata(inputs.build(), output);
-    }
-
     private static Optional<TaskInfo> findFailedTask(StageInfo stageInfo)
     {
         for (StageInfo subStage : stageInfo.getSubStages()) {
