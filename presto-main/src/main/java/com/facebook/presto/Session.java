@@ -43,7 +43,6 @@ import io.airlift.units.Duration;
 
 import java.security.Principal;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -52,6 +51,8 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
+import static com.facebook.presto.SystemSessionProperties.BAO_DISABLED_OPTIMIZERS;
+import static com.facebook.presto.SystemSessionProperties.BAO_DISABLED_RULES;
 import static com.facebook.presto.SystemSessionProperties.isLegacyMapSubscript;
 import static com.facebook.presto.SystemSessionProperties.isLegacyRowFieldOrdinalAccessEnabled;
 import static com.facebook.presto.SystemSessionProperties.isLegacyTimestamp;
@@ -92,7 +93,6 @@ public final class Session
     private final Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions;
     private final AccessControlContext context;
     private final Optional<Tracer> tracer;
-    private final Set<String> disabledOptimizers;
     private final OptimizerConfiguration optimizerConfiguration;
     private final RuntimeStats runtimeStats = new RuntimeStats();
 
@@ -119,8 +119,7 @@ public final class Session
             SessionPropertyManager sessionPropertyManager,
             Map<String, String> preparedStatements,
             Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions,
-            Optional<Tracer> tracer,
-            Set<String> disabledOptimizers
+            Optional<Tracer> tracer
     )
     {
         this.queryId = requireNonNull(queryId, "queryId is null");
@@ -143,8 +142,7 @@ public final class Session
         this.sessionPropertyManager = requireNonNull(sessionPropertyManager, "sessionPropertyManager is null");
         this.preparedStatements = requireNonNull(preparedStatements, "preparedStatements is null");
         this.sessionFunctions = requireNonNull(sessionFunctions, "sessionFunctions is null");
-        this.disabledOptimizers = requireNonNull(disabledOptimizers, "disabledOptimizers is null");
-        this.optimizerConfiguration = new OptimizerConfiguration();
+        this.optimizerConfiguration = new OptimizerConfiguration(getSystemProperty(BAO_DISABLED_OPTIMIZERS, String.class), getSystemProperty(BAO_DISABLED_RULES, String.class));
 
         ImmutableMap.Builder<ConnectorId, Map<String, String>> catalogPropertiesBuilder = ImmutableMap.builder();
         connectorProperties.entrySet().stream()
@@ -334,11 +332,6 @@ public final class Session
         return tracer;
     }
 
-    public Set<String> getDisabledOptimizers()
-    {
-        return disabledOptimizers;
-    }
-
     public Session beginTransactionId(TransactionId transactionId, TransactionManager transactionManager, AccessControl accessControl)
     {
         requireNonNull(transactionId, "transactionId is null");
@@ -429,8 +422,7 @@ public final class Session
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                tracer,
-                new HashSet<>()
+                tracer
         );
     }
 
@@ -485,8 +477,7 @@ public final class Session
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                tracer,
-                new HashSet<>()
+                tracer
         );
     }
 
@@ -801,8 +792,7 @@ public final class Session
                     sessionPropertyManager,
                     preparedStatements,
                     sessionFunctions,
-                    tracer,
-                    new HashSet<>()
+                    tracer
             );
         }
     }

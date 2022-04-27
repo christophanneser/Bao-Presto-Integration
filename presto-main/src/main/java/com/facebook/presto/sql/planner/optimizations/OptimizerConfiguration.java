@@ -20,6 +20,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -49,13 +50,13 @@ public class OptimizerConfiguration
         effectiveRules = new HashSet<>();
     }
 
-    public static Map<String, Integer> createRulesHitsMap()
+    public OptimizerConfiguration(String disabledOptimizers, String disabledRules)
     {
-        Map<String, Integer> map = new HashMap<>();
-        for (String ruleName : ruleNames()) {
-            map.put(ruleName, 0);
-        }
-        return map;
+        effectiveOptimizers = new HashSet<>();
+        effectiveRules = new HashSet<>();
+
+        this.disableOptimizers(disabledOptimizers.isEmpty() ? new ArrayList<>() : Arrays.asList(disabledOptimizers.split(",")));
+        this.disableRules(disabledRules.isEmpty() ? new ArrayList<>() : Arrays.asList(disabledRules.split(",")));
     }
 
     private static List<String> optimizerNames()

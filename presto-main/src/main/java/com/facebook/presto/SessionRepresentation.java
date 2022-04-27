@@ -332,8 +332,7 @@ public final class SessionRepresentation
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                Optional.empty(),
-                new HashSet<>()
+                Optional.empty()
         );
     }
 }
