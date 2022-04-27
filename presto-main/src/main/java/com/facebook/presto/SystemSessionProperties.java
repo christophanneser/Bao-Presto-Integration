@@ -70,7 +70,6 @@ import static java.util.stream.Collectors.joining;
 
 public final class SystemSessionProperties
 {
-
     // *** Bao integration
     public static final String BAO_ENABLE = "bao";
     public static final String BAO_EXPORT_GRAPHVIZ = "graphviz";
@@ -313,14 +312,12 @@ public final class SystemSessionProperties
                         BAO_DISABLED_OPTIMIZERS,
                         "[BAO] Disable certain query optimizers",
                         "",
-                        false
-                ),
+                        false),
                 stringProperty(
                         BAO_DISABLED_RULES,
                         "[BAO] Disable certain query optimizer rewrite rules",
                         "",
-                        false
-                ),
+                        false),
                 // ***
                 stringProperty(
                         EXECUTION_POLICY,

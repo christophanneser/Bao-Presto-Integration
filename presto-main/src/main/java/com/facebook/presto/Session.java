@@ -119,8 +119,7 @@ public final class Session
             SessionPropertyManager sessionPropertyManager,
             Map<String, String> preparedStatements,
             Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions,
-            Optional<Tracer> tracer
-    )
+            Optional<Tracer> tracer)
     {
         this.queryId = requireNonNull(queryId, "queryId is null");
         this.transactionId = requireNonNull(transactionId, "transactionId is null");
@@ -422,8 +421,7 @@ public final class Session
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                tracer
-        );
+                tracer);
     }
 
     public Session withDefaultProperties(
@@ -477,8 +475,7 @@ public final class Session
                 sessionPropertyManager,
                 preparedStatements,
                 sessionFunctions,
-                tracer
-        );
+                tracer);
     }
 
     public ConnectorSession toConnectorSession()
@@ -792,8 +789,7 @@ public final class Session
                     sessionPropertyManager,
                     preparedStatements,
                     sessionFunctions,
-                    tracer
-            );
+                    tracer);
         }
     }
 

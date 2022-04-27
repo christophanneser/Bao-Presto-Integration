@@ -21,7 +21,6 @@ import com.facebook.presto.sql.planner.plan.PlanFragmentId;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonRawValue;
-import org.checkerframework.checker.nullness.Opt;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -146,7 +145,8 @@ public class JsonRenderer
         }
 
         @JsonProperty
-        public Optional<String> getTableName() {
+        public Optional<String> getTableName()
+        {
             return tableName;
         }
 
