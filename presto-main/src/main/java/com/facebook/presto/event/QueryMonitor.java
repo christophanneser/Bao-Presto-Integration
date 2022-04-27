@@ -582,7 +582,7 @@ public class QueryMonitor
                 queryStats.getCumulativeUserMemory(),
                 queryStats.getCumulativeTotalMemory(),
                 queryStats.getCompletedDrivers(),
-                queryInfo.isCompleteInfo(),
+                queryInfo.isFinalQueryInfo(),
                 queryStats.getRuntimeStats());
     }
 
@@ -638,6 +638,40 @@ public class QueryMonitor
             log.warn(e, "Error creating json plan for query %s: %s", queryInfo.getQueryId(), e);
         }
         return Optional.empty();
+    }
+
+    private static QueryIOMetadata getQueryIOMetadata(QueryInfo queryInfo)
+    {
+        ImmutableList.Builder<QueryInputMetadata> inputs = ImmutableList.builder();
+        for (Input input : queryInfo.getInputs()) {
+            inputs.add(new QueryInputMetadata(
+                    input.getConnectorId().getCatalogName(),
+                    input.getSchema(),
+                    input.getTable(),
+                    input.getColumns().stream()
+                            .map(Column::getName).collect(Collectors.toList()),
+                    input.getConnectorInfo(),
+                    input.getStatistics()));
+        }
+
+        Optional<QueryOutputMetadata> output = Optional.empty();
+        if (queryInfo.getOutput().isPresent()) {
+            Optional<TableFinishInfo> tableFinishInfo = queryInfo.getQueryStats().getOperatorSummaries().stream()
+                    .map(OperatorStats::getInfo)
+                    .filter(TableFinishInfo.class::isInstance)
+                    .map(TableFinishInfo.class::cast)
+                    .findFirst();
+
+            output = Optional.of(
+                    new QueryOutputMetadata(
+                            queryInfo.getOutput().get().getConnectorId().getCatalogName(),
+                            queryInfo.getOutput().get().getSchema(),
+                            queryInfo.getOutput().get().getTable(),
+                            tableFinishInfo.map(TableFinishInfo::getSerializedConnectorOutputMetadata),
+                            tableFinishInfo.map(TableFinishInfo::isJsonLengthLimitExceeded),
+                            queryInfo.getOutput().get().getSerializedCommitOutput()));
+        }
+        return new QueryIOMetadata(inputs.build(), output);
     }
 
     private Optional<QueryFailureInfo> createQueryFailureInfo(ExecutionFailureInfo failureInfo, Optional<StageInfo> outputStage)

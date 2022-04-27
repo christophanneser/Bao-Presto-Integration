@@ -153,6 +153,7 @@ public final class SystemSessionProperties
     public static final String LEGACY_MAP_SUBSCRIPT = "do_not_use_legacy_map_subscript";
     public static final String ITERATIVE_OPTIMIZER = "iterative_optimizer_enabled";
     public static final String ITERATIVE_OPTIMIZER_TIMEOUT = "iterative_optimizer_timeout";
+    public static final String QUERY_ANALYZER_TIMEOUT = "query_analyzer_timeout";
     public static final String RUNTIME_OPTIMIZER_ENABLED = "runtime_optimizer_enabled";
     public static final String EXCHANGE_COMPRESSION = "exchange_compression";
     public static final String EXCHANGE_CHECKSUM = "exchange_checksum";
@@ -242,6 +243,7 @@ public final class SystemSessionProperties
     public static final String KEY_BASED_SAMPLING_FUNCTION = "key_based_sampling_function";
     public static final String HASH_BASED_DISTINCT_LIMIT_ENABLED = "hash_based_distinct_limit_enabled";
     public static final String HASH_BASED_DISTINCT_LIMIT_THRESHOLD = "hash_based_distinct_limit_threshold";
+    public static final String QUICK_DISTINCT_LIMIT_ENABLED = "quick_distinct_limit_enabled";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -802,6 +804,15 @@ public final class SystemSessionProperties
                         false,
                         value -> Duration.valueOf((String) value),
                         Duration::toString),
+                new PropertyMetadata<>(
+                        QUERY_ANALYZER_TIMEOUT,
+                        "Maximum processing time for query analyzer",
+                        VARCHAR,
+                        Duration.class,
+                        featuresConfig.getQueryAnalyzerTimeout(),
+                        false,
+                        value -> Duration.valueOf((String) value),
+                        Duration::toString),
                 booleanProperty(
                         RUNTIME_OPTIMIZER_ENABLED,
                         "Experimental: enable runtime optimizer",
@@ -1313,6 +1324,11 @@ public final class SystemSessionProperties
                         HYPERLOGLOG_STANDARD_ERROR_WARNING_THRESHOLD,
                         "Threshold for obtaining precise results from aggregation functions",
                         featuresConfig.getHyperloglogStandardErrorWarningThreshold(),
+                        false),
+                booleanProperty(
+                        QUICK_DISTINCT_LIMIT_ENABLED,
+                        "Enable quick distinct limit queries that give results as soon as a new distinct value is found",
+                        featuresConfig.isQuickDistinctLimitEnabled(),
                         false));
     }
 
@@ -1748,6 +1764,11 @@ public final class SystemSessionProperties
     public static Duration getOptimizerTimeout(Session session)
     {
         return session.getSystemProperty(ITERATIVE_OPTIMIZER_TIMEOUT, Duration.class);
+    }
+
+    public static Duration getQueryAnalyzerTimeout(Session session)
+    {
+        return session.getSystemProperty(QUERY_ANALYZER_TIMEOUT, Duration.class);
     }
 
     public static boolean isExchangeCompressionEnabled(Session session)
@@ -2197,5 +2218,10 @@ public final class SystemSessionProperties
     public List<PropertyMetadata<?>> getSessionProperties()
     {
         return sessionProperties;
+    }
+
+    public static boolean isQuickDistinctLimitEnabled(Session session)
+    {
+        return session.getSystemProperty(QUICK_DISTINCT_LIMIT_ENABLED, Boolean.class);
     }
 }
