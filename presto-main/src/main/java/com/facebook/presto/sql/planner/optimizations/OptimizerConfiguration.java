@@ -72,6 +72,7 @@ public class OptimizerConfiguration
         opts.add("IterativeOptimizer"); // <-- will always be enabled!
         opts.add("KeyBasedSampler");
         opts.add("LimitPushDown");
+        opts.add("MergeJoinOptimizer");
         opts.add("MetadataDeleteOptimizer");
         opts.add("MetadataQueryOptimizer");
         opts.add("OptimizeMixedDistinctAggregations");
