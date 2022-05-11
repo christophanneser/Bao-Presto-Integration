@@ -51,7 +51,7 @@ public class BaoPipelines
 
     public void disableOptimizersOrRules(String disabledOptimizersPerTable, OptimizerType optimizerType)
     {
-        String[] tableOptimizerConfigs = disabledOptimizersPerTable.isEmpty() ? new String[0] : disabledOptimizersPerTable.split("!");
+        String[] tableOptimizerConfigs = disabledOptimizersPerTable.isEmpty() ? new String[0] : disabledOptimizersPerTable.split("|");
         for (String tableOptimizerConfig : tableOptimizerConfigs) {
             String[] parts = tableOptimizerConfig.split(":");
             String tableName = parts[0];
