@@ -30,6 +30,7 @@ import com.facebook.presto.spi.security.SelectedRole;
 import com.facebook.presto.spi.session.ResourceEstimates;
 import com.facebook.presto.spi.session.SessionPropertyConfigurationManager.SystemSessionPropertyConfiguration;
 import com.facebook.presto.spi.tracing.Tracer;
+import com.facebook.presto.sql.planner.optimizations.BaoPipelines;
 import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
 import com.facebook.presto.sql.tree.Execute;
 import com.facebook.presto.transaction.TransactionId;
@@ -94,6 +95,8 @@ public final class Session
     private final AccessControlContext context;
     private final Optional<Tracer> tracer;
     private final OptimizerConfiguration optimizerConfiguration;
+    // store an optimzier configuration for each base table relation
+    private final BaoPipelines baoPipeline;
     private final RuntimeStats runtimeStats = new RuntimeStats();
 
     public Session(
@@ -142,6 +145,7 @@ public final class Session
         this.preparedStatements = requireNonNull(preparedStatements, "preparedStatements is null");
         this.sessionFunctions = requireNonNull(sessionFunctions, "sessionFunctions is null");
         this.optimizerConfiguration = new OptimizerConfiguration(getSystemProperty(BAO_DISABLED_OPTIMIZERS, String.class), getSystemProperty(BAO_DISABLED_RULES, String.class));
+        this.baoPipeline = new BaoPipelines(getSystemProperty(BAO_DISABLED_OPTIMIZERS, String.class), getSystemProperty(BAO_DISABLED_RULES, String.class));
 
         ImmutableMap.Builder<ConnectorId, Map<String, String>> catalogPropertiesBuilder = ImmutableMap.builder();
         connectorProperties.entrySet().stream()
@@ -176,6 +180,11 @@ public final class Session
     public OptimizerConfiguration getOptimizerConfiguration()
     {
         return optimizerConfiguration;
+    }
+
+    public BaoPipelines getBaoPipelines()
+    {
+        return baoPipeline;
     }
 
     public QueryId getQueryId()

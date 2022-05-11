@@ -35,8 +35,10 @@ public class OptimizerConfiguration
 {
     private static final Logger log = Logger.get(OptimizerConfiguration.class);
     public boolean appliedCurrentOptimizer;
+
     // Store the final hash of the current query plan here
     public int planHash;
+
     // en/disable optimizers and rules
     public Map<String, Boolean> optimizersEnabled = createConfigMapFromList(optimizerNames());
     public Map<String, Boolean> rulesEnabled = createConfigMapFromList(ruleNames());

@@ -224,7 +224,7 @@ public class QueryMonitor
                                 " \"cpu\": %s," +
                                 " \"plan_hash\": %s," +
                                 "\"input_data_size\": %s}",
-                        queryInfo.getQueryId(), elapsed, planning, scheduling, running, finishing, cpuTime, session.getOptimizerConfiguration().planHash, rawInputDatasize);
+                        queryInfo.getQueryId(), elapsed, planning, scheduling, running, finishing, cpuTime, session.getBaoPipelines().planHash, rawInputDatasize);
                 baoConnector.exportExecutionTimeInfo(json);
             }
             // ***

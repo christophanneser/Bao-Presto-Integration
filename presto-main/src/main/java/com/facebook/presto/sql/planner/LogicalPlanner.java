@@ -52,6 +52,7 @@ import com.facebook.presto.sql.analyzer.RelationType;
 import com.facebook.presto.sql.analyzer.Scope;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.StatisticsAggregationPlanner.TableStatisticAggregation;
+import com.facebook.presto.sql.planner.optimizations.BaoPipelines;
 import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.DeleteNode;
@@ -234,6 +235,10 @@ public class LogicalPlanner
     {
         PlanNode root = planStatement(analysis, analysis.getStatement());
 
+        // setup the Bao pipeline which stores one optimizer config per pipeline
+        // todo: predefine such a pipeline using the system properties, that define which optimziers are disabled for which table
+        BaoPipelines baoPipelines = session.getBaoPipelines();
+
         planChecker.validateIntermediatePlan(root, session, metadata, sqlParser, variableAllocator.getTypes(), warningCollector);
         boolean enableVerboseRuntimeStats = SystemSessionProperties.isVerboseRuntimeStatsEnabled(session);
         // *** Bao integration
@@ -248,9 +253,7 @@ public class LogicalPlanner
                 // *** Bao integration
                 // check if optimizer is enabled; skip it otherwise
                 String optimizerName = optimizer.getClass().getSimpleName();
-                if (!optimizerConfiguration.isOptimizerEnabled(optimizerName)) {
-                    continue;
-                }
+
 
                 optimizerConfiguration.appliedCurrentOptimizer = false;
                 // ***
@@ -278,7 +281,7 @@ public class LogicalPlanner
         }
 
         TypeProvider types = variableAllocator.getTypes();
-        return new Plan(root, types, computeStats(root, types));
+        return new Plan(root, types, computeStats(root, types), baoPipelines);
     }
 
     private StatsAndCosts computeStats(PlanNode root, TypeProvider types)

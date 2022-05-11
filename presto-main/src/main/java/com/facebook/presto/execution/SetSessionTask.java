@@ -23,6 +23,7 @@ import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.StandardErrorCode;
 import com.facebook.presto.spi.session.PropertyMetadata;
 import com.facebook.presto.sql.analyzer.SemanticException;
+import com.facebook.presto.sql.planner.optimizations.OptimizerType;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.SetSession;
@@ -96,13 +97,14 @@ public class SetSessionTask
         // *** Bao integration
         String property = parts.get(0);
         if (property.equals(SystemSessionProperties.BAO_DISABLED_OPTIMIZERS) || property.equals(SystemSessionProperties.BAO_DISABLED_RULES)) {
-            List<String> values = value.isEmpty() ? new ArrayList<>() : Arrays.asList(value.split(","));
+            // property will look as follows: '<relation1>:<list of disabled optimizers or rules>!<relation2>:<list of disabled optimizers or rules>!...
+            //List<String> values = value.isEmpty() ? new ArrayList<>() : Arrays.asList(value.split(","));
             switch (property) {
                 case SystemSessionProperties.BAO_DISABLED_OPTIMIZERS:
-                    session.getOptimizerConfiguration().disableOptimizers(values);
+                    session.getBaoPipelines().disableOptimizersOrRules(value, OptimizerType.OPTIMIZER);
                     break;
                 case SystemSessionProperties.BAO_DISABLED_RULES:
-                    session.getOptimizerConfiguration().disableRules(values);
+                    session.getBaoPipelines().disableOptimizersOrRules(value, OptimizerType.RULE);
                     break;
                 default:
                     throw new PrestoException(StandardErrorCode.INVALID_SESSION_PROPERTY, "could not disable optimizers/rules via session property");

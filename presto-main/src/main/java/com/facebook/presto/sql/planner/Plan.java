@@ -15,6 +15,7 @@ package com.facebook.presto.sql.planner;
 
 import com.facebook.presto.cost.StatsAndCosts;
 import com.facebook.presto.spi.plan.PlanNode;
+import com.facebook.presto.sql.planner.optimizations.BaoPipelines;
 
 import static java.util.Objects.requireNonNull;
 
@@ -23,12 +24,22 @@ public class Plan
     private final PlanNode root;
     private final TypeProvider types;
     private final StatsAndCosts statsAndCosts;
+    private final BaoPipelines baoPipeline;
 
     public Plan(PlanNode root, TypeProvider types, StatsAndCosts statsAndCosts)
     {
         this.root = requireNonNull(root, "root is null");
         this.types = requireNonNull(types, "types is null");
         this.statsAndCosts = requireNonNull(statsAndCosts, "statsAndCosts is null");
+        this.baoPipeline = null;
+    }
+
+    public Plan(PlanNode root, TypeProvider types, StatsAndCosts statsAndCosts, BaoPipelines baoPipeline)
+    {
+        this.root = requireNonNull(root, "root is null");
+        this.types = requireNonNull(types, "types is null");
+        this.statsAndCosts = requireNonNull(statsAndCosts, "statsAndCosts is null");
+        this.baoPipeline = requireNonNull(baoPipeline, "baoPipeline is null");
     }
 
     public PlanNode getRoot()
@@ -44,5 +55,10 @@ public class Plan
     public StatsAndCosts getStatsAndCosts()
     {
         return statsAndCosts;
+    }
+
+    public BaoPipelines getBaoPipeline()
+    {
+        return baoPipeline;
     }
 }

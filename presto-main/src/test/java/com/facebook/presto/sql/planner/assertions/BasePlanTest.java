@@ -36,6 +36,7 @@ import org.intellij.lang.annotations.Language;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -152,6 +153,19 @@ public class BasePlanTest
             PlanAssert.assertPlan(transactionSession, queryRunner.getMetadata(), queryRunner.getStatsCalculator(), actualPlan, pattern);
             return null;
         });
+    }
+
+    protected Plan testPlanOptimization(String sql)
+    {
+        List<PlanOptimizer> optimizers = new ArrayList<>(queryRunner.getPlanOptimizers(true));
+        return queryRunner.inTransaction(queryRunner.getDefaultSession(), transactionSession -> queryRunner.createPlan(
+                transactionSession,
+                sql,
+                ImmutableList.<PlanOptimizer>builder()
+                        .addAll(optimizers)
+                        .add(getExpressionTranslator()).build(), // To avoid assert plan failure not printing out plan (#12885)
+                LogicalPlanner.Stage.OPTIMIZED_AND_VALIDATED,
+                WarningCollector.NOOP));
     }
 
     protected void assertDistributedPlan(String sql, PlanMatchPattern pattern)
