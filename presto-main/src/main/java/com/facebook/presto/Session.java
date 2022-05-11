@@ -94,8 +94,9 @@ public final class Session
     private final Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions;
     private final AccessControlContext context;
     private final Optional<Tracer> tracer;
+    // DEPRECATED: for this experimental branch, we consider one OptimizerConfiguration per pipeline, however, this variable is still used to calculate query spans
     private final OptimizerConfiguration optimizerConfiguration;
-    // store an optimzier configuration for each base table relation
+    // store an  OptimizerConfiguration for each base table relation
     private final BaoPipelines baoPipeline;
     private final RuntimeStats runtimeStats = new RuntimeStats();
 

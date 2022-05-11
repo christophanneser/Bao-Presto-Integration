@@ -51,7 +51,7 @@ public class BaoPipelines
 
     public void disableOptimizersOrRules(String disabledOptimizersPerTable, OptimizerType optimizerType)
     {
-        String[] tableOptimizerConfigs = disabledOptimizersPerTable.isEmpty() ? new String[0] : disabledOptimizersPerTable.split("|");
+        String[] tableOptimizerConfigs = disabledOptimizersPerTable.isEmpty() ? new String[0] : disabledOptimizersPerTable.split("\\|");
         for (String tableOptimizerConfig : tableOptimizerConfigs) {
             String[] parts = tableOptimizerConfig.split(":");
             String tableName = parts[0];
@@ -66,7 +66,7 @@ public class BaoPipelines
                 }
             }
             else {
-                // optimizer configuration for this pipeline does not exist yet
+                // optimizer configuration for this pipeline does not yet exist
                 OptimizerConfiguration optimizerConfiguration = new OptimizerConfiguration();
 
                 if (optimizerType == OptimizerType.OPTIMIZER) {
