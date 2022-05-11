@@ -38,39 +38,15 @@ public class BaoPipelines
     // disabledRules: "<table>:<disabledRule,...>!<table><disabledRule,...>!..."
     public BaoPipelines(String disabledOptimizers, String disabledRules)
     {
+        this.pipelineOptimizersConfigs = new HashMap<>();
         parsePipelineConfigs(disabledOptimizers, disabledRules);
     }
 
-    // disabledOptimizerPerTable = <tableName>:<disabledOptimizers*>
-    private void parsePipelineConfigs(String disabledOptimizersPerTable, String disabledRulesPerTable)
+    // disabledOptimizerPerTable = <tableName>:<disabledOptimizers*>!...
+    public void parsePipelineConfigs(String disabledOptimizersPerTable, String disabledRulesPerTable)
     {
-        class Config
-        {
-            String disabledOptimizers;
-            String disabledRules;
-        }
-
-        Map<String, Config> rawPipelineconfigs = new HashMap<>();
-
-        String[] tableOptimizerConfigs = disabledOptimizersPerTable.isEmpty() ? new String[0] : disabledOptimizersPerTable.split("!");
-        for (String tableOptimizerConfig : tableOptimizerConfigs) {
-            String[] parts = tableOptimizerConfig.split(":");
-            Config conf = new Config();
-            conf.disabledOptimizers = parts[1];
-            rawPipelineconfigs.put(parts[0], conf);
-        }
-
-        String[] tableRulesConfigs = disabledRulesPerTable.isEmpty() ? new String[0] : disabledRulesPerTable.split("!");
-        for (String tableRuleConfig : tableRulesConfigs) {
-            String[] parts = tableRuleConfig.split(":");
-            Config conf = rawPipelineconfigs.get(parts[0]);
-            conf.disabledRules = parts[1];
-        }
-
-        // create an optimizer configuration for each relation
-        for (Map.Entry<String, Config> kv : rawPipelineconfigs.entrySet()) {
-            this.pipelineOptimizersConfigs.put(kv.getKey(), new OptimizerConfiguration(kv.getValue().disabledOptimizers, kv.getValue().disabledRules));
-        }
+        disableOptimizersOrRules(disabledOptimizersPerTable, OptimizerType.OPTIMIZER);
+        disableOptimizersOrRules(disabledRulesPerTable, OptimizerType.RULE);
     }
 
     public void disableOptimizersOrRules(String disabledOptimizersPerTable, OptimizerType optimizerType)
@@ -79,7 +55,7 @@ public class BaoPipelines
         for (String tableOptimizerConfig : tableOptimizerConfigs) {
             String[] parts = tableOptimizerConfig.split(":");
             String tableName = parts[0];
-            List<String> disabledOptimizers = parts[1].isEmpty() ? new ArrayList<>() : Arrays.asList(parts[1].split(","));
+            List<String> disabledOptimizers = (parts.length < 2 || parts[1].isEmpty()) ? new ArrayList<>() : Arrays.asList(parts[1].split(","));
             if (this.pipelineOptimizersConfigs.containsKey(tableName)) {
                 // optimizer configuration for this pipeline already exist
                 if (optimizerType == OptimizerType.OPTIMIZER) {

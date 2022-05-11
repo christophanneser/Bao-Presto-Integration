@@ -92,6 +92,8 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.facebook.presto.SystemSessionProperties.BAO_DISABLED_OPTIMIZERS;
+import static com.facebook.presto.SystemSessionProperties.BAO_DISABLED_RULES;
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.common.type.VarbinaryType.VARBINARY;
 import static com.facebook.presto.metadata.MetadataUtil.toSchemaTableName;
@@ -236,8 +238,8 @@ public class LogicalPlanner
         PlanNode root = planStatement(analysis, analysis.getStatement());
 
         // setup the Bao pipeline which stores one optimizer config per pipeline
-        // todo: predefine such a pipeline using the system properties, that define which optimziers are disabled for which table
         BaoPipelines baoPipelines = session.getBaoPipelines();
+        baoPipelines.parsePipelineConfigs(session.getSystemProperty(BAO_DISABLED_OPTIMIZERS, String.class), session.getSystemProperty(BAO_DISABLED_RULES, String.class));
 
         planChecker.validateIntermediatePlan(root, session, metadata, sqlParser, variableAllocator.getTypes(), warningCollector);
         boolean enableVerboseRuntimeStats = SystemSessionProperties.isVerboseRuntimeStatsEnabled(session);
@@ -253,7 +255,6 @@ public class LogicalPlanner
                 // *** Bao integration
                 // check if optimizer is enabled; skip it otherwise
                 String optimizerName = optimizer.getClass().getSimpleName();
-
 
                 optimizerConfiguration.appliedCurrentOptimizer = false;
                 // ***
