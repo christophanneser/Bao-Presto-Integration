@@ -18,6 +18,7 @@ import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.sql.planner.plan.InternalPlanVisitor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableSet;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,230 +34,217 @@ import java.util.Set;
  */
 public class OptimizerConfiguration
 {
+    public static final ImmutableSet<String> ruleNames = new ImmutableSet.Builder<String>()
+            .add("AddIntermediateAggregations")
+            .add("AggregationExpressionRewrite")
+            .add("AggregationRowExpressionRewrite")
+            .add("ApplyExpressionRewrite")
+            .add("ApplyConnectorOptimization")
+            .add("ApplyRowExpressionRewrite")
+            .add("Builder")
+            .add("CanonicalizeExpressionRewriter")
+            .add("CanonicalizeExpressions")
+            .add("CheckNoPlanNodeMatchesRule")
+            .add("Context")
+            .add("CreatePartialTopN")
+            .add("Decorrelated")
+            .add("DecorrelatingVisitor")
+            .add("DereferenceReplacer")
+            .add("DesugarAtTimeZone")
+            .add("DesugarCurrentUser")
+            .add("DesugarLambdaExpression")
+            .add("DesugarRowSubscript")
+            .add("DesugarTryExpression")
+            .add("DetermineJoinDistributionType")
+            .add("DetermineSemiJoinDistributionType")
+            .add("EliminateCrossJoins")
+            .add("EliminateEmptyJoins")
+            .add("EvaluateZeroLimit")
+            .add("EvaluateZeroSample")
+            .add("ExpressionRewriteRuleSet")
+            .add("ExtractCommonPredicatesExpressionRewriter")
+            .add("ExtractFromFilter")
+            .add("ExtractFromJoin")
+            .add("ExtractProjectDereferences")
+            .add("ExtractSpatialInnerJoin")
+            .add("ExtractSpatialJoins")
+            .add("ExtractSpatialLeftJoin")
+            .add("FilterExpressionRewrite")
+            .add("FilterRowExpressionRewrite")
+            .add("GatherAndMergeWindows")
+            .add("ImplementBernoulliSampleAsFilter")
+            .add("ImplementFilteredAggregations")
+            .add("ImplementOffset")
+            .add("InlineProjections")
+            .add("InlineSqlFunctions")
+            .add("InlineSqlFunctionsRewriter")
+            .add("JoinDynamicFilterResult")
+            .add("JoinEnumerationResult")
+            .add("JoinEnumerator")
+            .add("JoinExpressionRewrite")
+            .add("JoinNodeFlattener")
+            .add("JoinRowExpressionRewrite")
+            .add("LambdaCaptureDesugaringRewriter")
+            .add("LayoutConstraintEvaluatorForRowExpression")
+            .add("LogicalExpressionRewriter")
+            .add("LookupVariableResolver")
+            .add("ManipulateAdjacentWindowsOverProjects")
+            .add("MappedAggregationInfo")
+            .add("MergeAdjacentWindowsOverProjects")
+            .add("MergeFilters")
+            .add("MergeLimitWithDistinct")
+            .add("MergeLimitWithSort")
+            .add("MergeLimitWithTopN")
+            .add("MergeLimits")
+            .add("MultiJoinNode")
+            .add("MultipleDistinctAggregationToMarkDistinct")
+            .add("PickTableLayout")
+            .add("PickTableLayoutForPredicate")
+            .add("PickTableLayoutWithoutPredicate")
+            .add("PlanNodeWithCost")
+            .add("PlanRemoteProjections")
+            .add("PlanWithConsumedDynamicFilters")
+            .add("PreconditionRules")
+            .add("ProjectExpressionRewrite")
+            .add("ProjectOffPushDownRule")
+            .add("ProjectRowExpressionRewrite")
+            .add("ProjectionContext")
+            .add("PruneAggregationColumns")
+            .add("PruneAggregationSourceColumns")
+            .add("PruneCountAggregationOverScalar")
+            .add("PruneCrossJoinColumns")
+            .add("PruneFilterColumns")
+            .add("PruneIndexSourceColumns")
+            .add("PruneJoinChildrenColumns")
+            .add("PruneJoinColumns")
+            .add("PruneLimitColumns")
+            .add("PruneMarkDistinctColumns")
+            .add("PruneOrderByInAggregation")
+            .add("PruneOutputColumns")
+            .add("PruneProjectColumns")
+            .add("PruneRedundantProjectionAssignments")
+            .add("PruneSemiJoinColumns")
+            .add("PruneSemiJoinFilteringSourceColumns")
+            .add("PruneTableScanColumns")
+            .add("PruneTopNColumns")
+            .add("PruneValuesColumns")
+            .add("PruneWindowColumns")
+            .add("PushAggregationThroughOuterJoin")
+            .add("PushDownDereferenceThrough")
+            .add("PushDownDereferenceThroughJoin")
+            .add("PushDownDereferenceThroughProject")
+            .add("PushDownDereferenceThroughSemiJoin")
+            .add("PushDownDereferenceThroughUnnest")
+            .add("PushDownDereferences")
+            .add("PushDownNegationsExpressionRewriter")
+            .add("PushLimitThroughMarkDistinct")
+            .add("PushLimitThroughOffset")
+            .add("PushLimitThroughOuterJoin")
+            .add("PushLimitThroughProject")
+            .add("PushLimitThroughSemiJoin")
+            .add("PushLimitThroughUnion")
+            .add("PushOffsetThroughProject")
+            .add("PushPartialAggregationThroughExchange")
+            .add("PushPartialAggregationThroughJoin")
+            .add("PushProjectionThroughExchange")
+            .add("PushProjectionThroughUnion")
+            .add("PushRemoteExchangeThroughAssignUniqueId")
+            .add("PushTableWriteThroughUnion")
+            .add("PushTopNThroughUnion")
+            .add("PushdownDereferencesInProject")
+            .add("RemoveEmptyDelete")
+            .add("RemoveFullSample")
+            .add("RemoveRedundantIdentityProjections")
+            .add("RemoveTrivialFilters")
+            .add("RemoveUnreferencedScalarApplyNodes")
+            .add("RemoveUnreferencedScalarLateralNodes")
+            .add("RemoveUnsupportedDynamicFilters")
+            .add("ReorderJoins")
+            .add("RewriteAggregationIfToFilter")
+            .add("RewriteFilterWithExternalFunctionToProject")
+            .add("RewriteSpatialPartitioningAggregation")
+            .add("Rewriter")
+            .add("RowExpressionRewriteRuleSet")
+            .add("RuntimeReorderJoinSides")
+            .add("SimplifyCardinalityMap")
+            .add("SimplifyCountOverConstant")
+            .add("SimplifyExpressions")
+            .add("SimplifyRowExpressions")
+            .add("SingleDistinctAggregationToGroupBy")
+            .add("SpatialJoinRowExpressionRewrite")
+            .add("SwapAdjacentWindowsBySpecifications")
+            .add("TableFinishRowExpressionRewrite")
+            .add("TableWriterRowExpressionRewrite")
+            .add("TransformCorrelatedInPredicateToJoin")
+            .add("TransformCorrelatedLateralJoinToJoin")
+            .add("TransformCorrelatedScalarAggregationToJoin")
+            .add("TransformCorrelatedScalarSubquery")
+            .add("TransformCorrelatedSingleRowSubqueryToProject")
+            .add("TransformExistsApplyToLateralNode")
+            .add("TransformUncorrelatedInPredicateSubqueryToSemiJoin")
+            .add("TransformUncorrelatedLateralToJoin")
+            .add("TranslateExpressions")
+            .add("ValuesExpressionRewrite")
+            .add("ValuesRowExpressionRewrite")
+            .add("Visitor")
+            .add("WindowRowExpressionRewrite")
+            .build();
+    public static final ImmutableSet<String> optimizerNames = new ImmutableSet.Builder<String>()
+            .add("AddLocalExchanges")
+            .add("ApplyConnectorOptimization")
+            .add("CheckSubqueryNodesAreRewritten")
+            .add("HashGenerationOptimizer")
+            .add("HashBasedPartialDistinctLimit")
+            .add("ImplementIntersectAndExceptAsUnion")
+            .add("IndexJoinOptimizer")
+            .add("IterativeOptimizer") // <-- will always be enabled!
+            .add("KeyBasedSampler")
+            .add("LimitPushDown")
+            .add("MergeJoinOptimizer")
+            .add("MetadataDeleteOptimizer")
+            .add("MetadataQueryOptimizer")
+            .add("OptimizeMixedDistinctAggregations")
+            .add("PruneUnreferencedOutputs")
+            .add("PushdownSubfields")
+            .add("RemoveUnsupportedDynamicFilters")
+            .add("ReplicateSemiJoinInDelete")
+            .add("SetFlatteningOptimizer")
+            .add("StatsRecordingPlanOptimizer")
+            .add("TransformQuantifiedComparisonApplyToLateralJoin")
+            .add("UnaliasSymbolReferences")
+            .add("WindowFilterPushDown")
+            .build();
     private static final Logger log = Logger.get(OptimizerConfiguration.class);
     public boolean appliedCurrentOptimizer;
     // Store the final hash of the current query plan here
     public int planHash;
     // en/disable optimizers and rules
-    public Map<String, Boolean> optimizersEnabled = createConfigMapFromList(optimizerNames());
-    public Map<String, Boolean> rulesEnabled = createConfigMapFromList(ruleNames());
+    private Map<String, Boolean> optimizersEnabled = createConfigMapFromList();
     // track optimizers and rules if they are required or effective
-    public Set<String> effectiveOptimizers;
-    public Set<String> effectiveRules;
+    private Set<EffectiveOptimizerPart> effectiveOptimizers;
 
     public OptimizerConfiguration()
     {
         effectiveOptimizers = new HashSet<>();
-        effectiveRules = new HashSet<>();
     }
 
-    public OptimizerConfiguration(String disabledOptimizers, String disabledRules)
+    public OptimizerConfiguration(String disabledOptimizers)
     {
         effectiveOptimizers = new HashSet<>();
-        effectiveRules = new HashSet<>();
-
         this.disableOptimizers(disabledOptimizers.isEmpty() ? new ArrayList<>() : Arrays.asList(disabledOptimizers.split(",")));
-        this.disableRules(disabledRules.isEmpty() ? new ArrayList<>() : Arrays.asList(disabledRules.split(",")));
     }
 
-    private static List<String> optimizerNames()
-    {
-        List<String> opts = new ArrayList<>();
-        opts.add("AddLocalExchanges");
-        opts.add("ApplyConnectorOptimization");
-        opts.add("CheckSubqueryNodesAreRewritten");
-        opts.add("HashGenerationOptimizer");
-        opts.add("HashBasedPartialDistinctLimit");
-        opts.add("ImplementIntersectAndExceptAsUnion");
-        opts.add("IndexJoinOptimizer");
-        opts.add("IterativeOptimizer"); // <-- will always be enabled!
-        opts.add("KeyBasedSampler");
-        opts.add("LimitPushDown");
-        opts.add("MergeJoinOptimizer");
-        opts.add("MetadataDeleteOptimizer");
-        opts.add("MetadataQueryOptimizer");
-        opts.add("OptimizeMixedDistinctAggregations");
-        opts.add("PruneUnreferencedOutputs");
-        opts.add("PushdownSubfields");
-        opts.add("RemoveUnsupportedDynamicFilters");
-        opts.add("ReplicateSemiJoinInDelete");
-        opts.add("SetFlatteningOptimizer");
-        opts.add("StatsRecordingPlanOptimizer");
-        opts.add("TransformQuantifiedComparisonApplyToLateralJoin");
-        opts.add("UnaliasSymbolReferences");
-        opts.add("WindowFilterPushDown");
-        return opts;
-    }
-
-    public static List<String> ruleNames()
-    {
-        List<String> rules = new ArrayList<>();
-
-        rules.add("AddIntermediateAggregations");
-        rules.add("AggregationExpressionRewrite");
-        rules.add("AggregationRowExpressionRewrite");
-        rules.add("ApplyExpressionRewrite");
-        rules.add("ApplyConnectorOptimization");
-        rules.add("ApplyRowExpressionRewrite");
-        rules.add("Builder");
-        rules.add("CanonicalizeExpressionRewriter");
-        rules.add("CanonicalizeExpressions");
-        rules.add("CheckNoPlanNodeMatchesRule");
-        rules.add("Context");
-        rules.add("CreatePartialTopN");
-        rules.add("Decorrelated");
-        rules.add("DecorrelatingVisitor");
-        rules.add("DereferenceReplacer");
-        rules.add("DesugarAtTimeZone");
-        rules.add("DesugarCurrentUser");
-        rules.add("DesugarLambdaExpression");
-        rules.add("DesugarRowSubscript");
-        rules.add("DesugarTryExpression");
-        rules.add("DetermineJoinDistributionType");
-        rules.add("DetermineSemiJoinDistributionType");
-        rules.add("EliminateCrossJoins");
-        rules.add("EliminateEmptyJoins");
-        rules.add("EvaluateZeroLimit");
-        rules.add("EvaluateZeroSample");
-        rules.add("ExpressionRewriteRuleSet");
-        rules.add("ExtractCommonPredicatesExpressionRewriter");
-        rules.add("ExtractFromFilter");
-        rules.add("ExtractFromJoin");
-        rules.add("ExtractProjectDereferences");
-        rules.add("ExtractSpatialInnerJoin");
-        rules.add("ExtractSpatialJoins");
-        rules.add("ExtractSpatialLeftJoin");
-        rules.add("FilterExpressionRewrite");
-        rules.add("FilterRowExpressionRewrite");
-        rules.add("GatherAndMergeWindows");
-        rules.add("ImplementBernoulliSampleAsFilter");
-        rules.add("ImplementFilteredAggregations");
-        rules.add("ImplementOffset");
-        rules.add("InlineProjections");
-        rules.add("InlineSqlFunctions");
-        rules.add("InlineSqlFunctionsRewriter");
-        rules.add("JoinDynamicFilterResult");
-        rules.add("JoinEnumerationResult");
-        rules.add("JoinEnumerator");
-        rules.add("JoinExpressionRewrite");
-        rules.add("JoinNodeFlattener");
-        rules.add("JoinRowExpressionRewrite");
-        rules.add("LambdaCaptureDesugaringRewriter");
-        rules.add("LayoutConstraintEvaluatorForRowExpression");
-        rules.add("LogicalExpressionRewriter");
-        rules.add("LookupVariableResolver");
-        rules.add("ManipulateAdjacentWindowsOverProjects");
-        rules.add("MappedAggregationInfo");
-        rules.add("MergeAdjacentWindowsOverProjects");
-        rules.add("MergeFilters");
-        rules.add("MergeLimitWithDistinct");
-        rules.add("MergeLimitWithSort");
-        rules.add("MergeLimitWithTopN");
-        rules.add("MergeLimits");
-        rules.add("MultiJoinNode");
-        rules.add("MultipleDistinctAggregationToMarkDistinct");
-        rules.add("PickTableLayout");
-        rules.add("PickTableLayoutForPredicate");
-        rules.add("PickTableLayoutWithoutPredicate");
-        rules.add("PlanNodeWithCost");
-        rules.add("PlanRemoteProjections");
-        rules.add("PlanWithConsumedDynamicFilters");
-        rules.add("PreconditionRules");
-        rules.add("ProjectExpressionRewrite");
-        rules.add("ProjectOffPushDownRule");
-        rules.add("ProjectRowExpressionRewrite");
-        rules.add("ProjectionContext");
-        rules.add("PruneAggregationColumns");
-        rules.add("PruneAggregationSourceColumns");
-        rules.add("PruneCountAggregationOverScalar");
-        rules.add("PruneCrossJoinColumns");
-        rules.add("PruneFilterColumns");
-        rules.add("PruneIndexSourceColumns");
-        rules.add("PruneJoinChildrenColumns");
-        rules.add("PruneJoinColumns");
-        rules.add("PruneLimitColumns");
-        rules.add("PruneMarkDistinctColumns");
-        rules.add("PruneOrderByInAggregation");
-        rules.add("PruneOutputColumns");
-        rules.add("PruneProjectColumns");
-        rules.add("PruneRedundantProjectionAssignments");
-        rules.add("PruneSemiJoinColumns");
-        rules.add("PruneSemiJoinFilteringSourceColumns");
-        rules.add("PruneTableScanColumns");
-        rules.add("PruneTopNColumns");
-        rules.add("PruneValuesColumns");
-        rules.add("PruneWindowColumns");
-        rules.add("PushAggregationThroughOuterJoin");
-        rules.add("PushDownDereferenceThrough");
-        rules.add("PushDownDereferenceThroughJoin");
-        rules.add("PushDownDereferenceThroughProject");
-        rules.add("PushDownDereferenceThroughSemiJoin");
-        rules.add("PushDownDereferenceThroughUnnest");
-        rules.add("PushDownDereferences");
-        rules.add("PushDownNegationsExpressionRewriter");
-        rules.add("PushLimitThroughMarkDistinct");
-        rules.add("PushLimitThroughOffset");
-        rules.add("PushLimitThroughOuterJoin");
-        rules.add("PushLimitThroughProject");
-        rules.add("PushLimitThroughSemiJoin");
-        rules.add("PushLimitThroughUnion");
-        rules.add("PushOffsetThroughProject");
-        rules.add("PushPartialAggregationThroughExchange");
-        rules.add("PushPartialAggregationThroughJoin");
-        rules.add("PushProjectionThroughExchange");
-        rules.add("PushProjectionThroughUnion");
-        rules.add("PushRemoteExchangeThroughAssignUniqueId");
-        rules.add("PushTableWriteThroughUnion");
-        rules.add("PushTopNThroughUnion");
-        rules.add("PushdownDereferencesInProject");
-        rules.add("RemoveEmptyDelete");
-        rules.add("RemoveFullSample");
-        rules.add("RemoveRedundantIdentityProjections");
-        rules.add("RemoveTrivialFilters");
-        rules.add("RemoveUnreferencedScalarApplyNodes");
-        rules.add("RemoveUnreferencedScalarLateralNodes");
-        rules.add("RemoveUnsupportedDynamicFilters");
-        rules.add("ReorderJoins");
-        rules.add("RewriteAggregationIfToFilter");
-        rules.add("RewriteFilterWithExternalFunctionToProject");
-        rules.add("RewriteSpatialPartitioningAggregation");
-        rules.add("Rewriter");
-        rules.add("Rewriter");
-        rules.add("RowExpressionRewriteRuleSet");
-        rules.add("RuntimeReorderJoinSides");
-        rules.add("SimplifyCardinalityMap");
-        rules.add("SimplifyCountOverConstant");
-        rules.add("SimplifyExpressions");
-        rules.add("SimplifyRowExpressions");
-        rules.add("SingleDistinctAggregationToGroupBy");
-        rules.add("SpatialJoinRowExpressionRewrite");
-        rules.add("SwapAdjacentWindowsBySpecifications");
-        rules.add("TableFinishRowExpressionRewrite");
-        rules.add("TableWriterRowExpressionRewrite");
-        rules.add("TransformCorrelatedInPredicateToJoin");
-        rules.add("TransformCorrelatedLateralJoinToJoin");
-        rules.add("TransformCorrelatedScalarAggregationToJoin");
-        rules.add("TransformCorrelatedScalarSubquery");
-        rules.add("TransformCorrelatedSingleRowSubqueryToProject");
-        rules.add("TransformExistsApplyToLateralNode");
-        rules.add("TransformUncorrelatedInPredicateSubqueryToSemiJoin");
-        rules.add("TransformUncorrelatedLateralToJoin");
-        rules.add("TranslateExpressions");
-        rules.add("ValuesExpressionRewrite");
-        rules.add("ValuesRowExpressionRewrite");
-        rules.add("Visitor");
-        rules.add("WindowRowExpressionRewrite");
-
-        return rules;
-    }
-
-    private static Map<String, Boolean> createConfigMapFromList(List<String> optimizersOrRules)
+    private static Map<String, Boolean> createConfigMapFromList()
     {
         Map<String, Boolean> map = new HashMap<>();
-        for (String ruleName : optimizersOrRules) {
-            map.put(ruleName, true); // all optimizers/rules are enabled by default
-        }
+        OptimizerConfiguration.optimizerNames.forEach(name -> map.put(name, true));
+        OptimizerConfiguration.ruleNames.forEach(name -> map.put(name, true));
         return map;
+    }
+
+    public Set<EffectiveOptimizerPart> getEffectiveOptimizers()
+    {
+        return effectiveOptimizers;
     }
 
     public Boolean isOptimizerEnabled(String optimizer)
@@ -268,71 +256,50 @@ public class OptimizerConfiguration
         return optimizersEnabled.get(optimizer);
     }
 
-    public Boolean isRuleEnabled(String rule)
+    public void registerEffectiveRule(String rule)
     {
-        if (!rulesEnabled.containsKey(rule)) {
-            log.error("rule %s does not exist in OptimizerConfiguration", rule);
-            return true;
-        }
-        return rulesEnabled.get(rule);
+        assert (effectiveOptimizers != null);
+        effectiveOptimizers.add(new EffectiveOptimizerPart(OptimizerType.RULE, rule));
     }
 
-    public void registerRuleHit(String ruleName)
+    public void registerEffectiveOptimizer(String optimizer)
     {
-        //if (SqlQueryExecution.getQuerySpan) { todo
-
-        assert (effectiveRules != null);
-        effectiveRules.add(ruleName);
-        //}
+        assert (effectiveOptimizers != null);
+        effectiveOptimizers.add(new EffectiveOptimizerPart(OptimizerType.OPTIMIZER, optimizer));
     }
 
     public void reset()
     {
         effectiveOptimizers = new HashSet<>();
-        effectiveRules = new HashSet<>();
-        optimizersEnabled = createConfigMapFromList(optimizerNames());
-        rulesEnabled = createConfigMapFromList(ruleNames());
+        optimizersEnabled = createConfigMapFromList();
     }
 
     public void disableOptimizers(List<String> optimizers)
     {
-        optimizersEnabled = createConfigMapFromList(optimizerNames());
+        optimizersEnabled = createConfigMapFromList();
         for (String optimizer : optimizers) {
             assert (optimizersEnabled.containsKey(optimizer));
             optimizersEnabled.replace(optimizer, false);
         }
     }
 
+    public void disableEffectiveOptimizerPart(EffectiveOptimizerPart optimizerPart)
+    {
+        disableOptimizer(optimizerPart.getName());
+    }
+
     public void disableOptimizer(String optimizer)
     {
-        optimizersEnabled = createConfigMapFromList(optimizerNames());
+        optimizersEnabled = createConfigMapFromList();
         if (!optimizersEnabled.containsKey(optimizer)) {
             System.out.println("ERROR: optimizer not found:" + optimizer);
         }
         optimizersEnabled.replace(optimizer, false);
     }
 
-    public void disableRule(String rule)
-    {
-        rulesEnabled = createConfigMapFromList(ruleNames());
-        if (!rulesEnabled.containsKey(rule)) {
-            System.out.println("ERROR: rule not found:" + rule);
-        }
-        rulesEnabled.replace(rule, false);
-    }
-
-    public void disableRules(List<String> rules)
-    {
-        rulesEnabled = createConfigMapFromList(ruleNames());
-        for (String rule : rules) {
-            assert (rulesEnabled.containsKey(rule));
-            rulesEnabled.replace(rule, false);
-        }
-    }
-
     public String getJson(PlanNode root)
     {
-        String result = "";
+        String result;
         result = root.toString();
         ObjectMapper om = new ObjectMapper();
         try {
@@ -341,9 +308,6 @@ public class OptimizerConfiguration
         catch (JsonProcessingException e) {
             e.printStackTrace();
         }
-        // JsonCodec<PlanNode> codec = new JsonCodecFactory().jsonCodec(PlanNode.class);
-        // result = codec.toJson(root);
-        // System.out.println(result);
         return result;
     }
 
@@ -364,7 +328,7 @@ public class OptimizerConfiguration
         @Override
         public PlanNode visitPlan(PlanNode node, Integer context)
         {
-            node.getSources().forEach(child -> visitPlan((PlanNode) child, state));
+            node.getSources().forEach(child -> visitPlan(child, state));
             state += node.hashCode();
             return node;
         }

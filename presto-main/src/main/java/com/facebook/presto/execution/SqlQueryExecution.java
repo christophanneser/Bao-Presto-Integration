@@ -58,6 +58,7 @@ import com.facebook.presto.sql.planner.PlanVariableAllocator;
 import com.facebook.presto.sql.planner.SplitSourceFactory;
 import com.facebook.presto.sql.planner.SubPlan;
 import com.facebook.presto.sql.planner.bao.BaoConnector;
+import com.facebook.presto.sql.planner.optimizations.EffectiveOptimizerPart;
 import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.optimizations.QuerySpan;
@@ -74,7 +75,6 @@ import org.joda.time.DateTime;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -85,11 +85,11 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import static com.facebook.presto.SystemSessionProperties.getExecutionPolicy;
+import static com.facebook.presto.SystemSessionProperties.getQueryAnalyzerTimeout;
 import static com.facebook.presto.SystemSessionProperties.isExecuteQuery;
 import static com.facebook.presto.SystemSessionProperties.isExportGraphviz;
 import static com.facebook.presto.SystemSessionProperties.isExportJSON;
-import static com.facebook.presto.SystemSessionProperties.getExecutionPolicy;
-import static com.facebook.presto.SystemSessionProperties.getQueryAnalyzerTimeout;
 import static com.facebook.presto.SystemSessionProperties.isSpoolingOutputBufferEnabled;
 import static com.facebook.presto.SystemSessionProperties.isUseLegacyScheduler;
 import static com.facebook.presto.common.RuntimeMetricName.FRAGMENT_PLAN_TIME_NANOS;
@@ -500,8 +500,7 @@ public class SqlQueryExecution
             OptimizerConfiguration optimizerConfiguration = getSession().getOptimizerConfiguration();
             optimizerConfiguration.reset();
 
-            Set<String> requiredRules = new HashSet<>();
-            Set<String> requiredOptimizers = new HashSet<>(planOptimizers.size());
+            Set<EffectiveOptimizerPart> requiredOptimizers = new HashSet<>();
 
             // 1. get default effective rules and optimizers (stored in OptimizerConfig)
             LogicalPlanner logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
@@ -510,32 +509,21 @@ public class SqlQueryExecution
                     () -> logicalPlanner.plan(analysis));
             queryPlan.set(plan);
 
-            // initialize the optimizer span
-            QuerySpan span = new QuerySpan(optimizerConfiguration.effectiveOptimizers, optimizerConfiguration.effectiveRules);
-            while (span.hasNext()) {
-                // enable all optimizers and rules again
+            // initialize the optimizer span with effective default optimizers
+            QuerySpan querySpan = new QuerySpan(optimizerConfiguration.getEffectiveOptimizers());
+            while (querySpan.hasNext()) {
+                // enable all optimizers and rules again and find alternative optimizers
                 optimizerConfiguration.reset();
 
                 // disable effective rule or optimizer and track new effective optimizers
-                QuerySpan.EffectiveOptimizerPart optimizerPart = span.next();
-                switch (optimizerPart.type) {
-                    case OPTIMIZER: {
-                        optimizerConfiguration.disableOptimizer(optimizerPart.name);
-                        detectHitsInLogicalOptimization(requiredOptimizers, span, optimizerPart);
-                        break;
-                    }
-                    case RULE: {
-                        optimizerConfiguration.disableRule(optimizerPart.name);
-                        detectHitsInLogicalOptimization(requiredRules, span, optimizerPart);
-                    }
-                }
+                EffectiveOptimizerPart optimizerPart = querySpan.next();
+                optimizerPart.disableOptimizerAndDependencies(optimizerConfiguration);
+                detectHitsInLogicalOptimization(requiredOptimizers, querySpan, optimizerPart);
             }
 
             // send query span to driver
-            baoConnector.exportEffectiveOptimizers(new ArrayList<>(optimizerConfiguration.effectiveOptimizers));
-            baoConnector.exportEffectiveRules(new ArrayList<>(optimizerConfiguration.effectiveRules));
-            baoConnector.exportRequiredOptimizers(new ArrayList<>(requiredOptimizers));
-            baoConnector.exportRequiredRules(new ArrayList<>(requiredRules));
+            baoConnector.exportEffectiveOptimizerParts(querySpan.getSeenOptimizers());
+            baoConnector.exportRequiredOptimizerParts(requiredOptimizers);
 
             optimizerConfiguration.reset();
             return null;
@@ -602,7 +590,8 @@ public class SqlQueryExecution
         return new PlanRoot(fragmentedPlan, !explainAnalyze, extractConnectors(analysis));
     }
 
-    private void detectHitsInLogicalOptimization(Set<String> requiredOptimizersOrRules, QuerySpan optimizerSpan, QuerySpan.EffectiveOptimizerPart optimizerPart)
+    // todo: disable multiple optimizers at once here to find alternative rules iteratively?
+    private void detectHitsInLogicalOptimization(Set<EffectiveOptimizerPart> requiredOptimizersOrRules, QuerySpan optimizerSpan, EffectiveOptimizerPart optimizerPart)
     {
         OptimizerConfiguration optimizerConfiguration = getSession().getOptimizerConfiguration();
         LogicalPlanner logicalPlanner;
@@ -614,13 +603,13 @@ public class SqlQueryExecution
                     () -> logicalPlanner.plan(analysis));
             queryPlan.set(plan);
 
-            // track effective queries here in case query the plan is valid
-            optimizerSpan.addOptimizers(optimizerConfiguration.effectiveOptimizers);
-            optimizerSpan.addRules(optimizerConfiguration.effectiveRules);
+            // track effective queries here in case the query plan is valid
+            HashSet<EffectiveOptimizerPart> effectiveRulesAndOptimizers = new HashSet<>(optimizerConfiguration.getEffectiveOptimizers());
+            optimizerSpan.addAlternativeRulesAndOptimizers(ImmutableSet.of(optimizerPart), effectiveRulesAndOptimizers);
         }
         catch (Exception e) {
             // Invalid Rule Configuration found -> rule <i> is required!
-            requiredOptimizersOrRules.add(optimizerPart.name);
+            requiredOptimizersOrRules.add(optimizerPart);
         }
     }
 

@@ -95,18 +95,9 @@ public class SetSessionTask
 
         // *** Bao integration
         String property = parts.get(0);
-        if (property.equals(SystemSessionProperties.BAO_DISABLED_OPTIMIZERS) || property.equals(SystemSessionProperties.BAO_DISABLED_RULES)) {
+        if (property.equals(SystemSessionProperties.BAO_DISABLED_OPTIMIZERS)) {
             List<String> values = value.isEmpty() ? new ArrayList<>() : Arrays.asList(value.split(","));
-            switch (property) {
-                case SystemSessionProperties.BAO_DISABLED_OPTIMIZERS:
-                    session.getOptimizerConfiguration().disableOptimizers(values);
-                    break;
-                case SystemSessionProperties.BAO_DISABLED_RULES:
-                    session.getOptimizerConfiguration().disableRules(values);
-                    break;
-                default:
-                    throw new PrestoException(StandardErrorCode.INVALID_SESSION_PROPERTY, "could not disable optimizers/rules via session property");
-            }
+            session.getOptimizerConfiguration().disableOptimizers(values);
         }
         // ***
 

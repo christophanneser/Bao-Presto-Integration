@@ -79,7 +79,6 @@ public final class SystemSessionProperties
     public static final String BAO_EXECUTE_QUERY = "execute_query";
     public static final String BAO_SOCKET = "bao_socket";
     public static final String BAO_DISABLED_OPTIMIZERS = "bao_disabled_optimizers";
-    public static final String BAO_DISABLED_RULES = "bao_disabled_rules";
     // ***
 
     public static final String OPTIMIZE_HASH_GENERATION = "optimize_hash_generation";
@@ -312,12 +311,7 @@ public final class SystemSessionProperties
                         false),
                 stringProperty(
                         BAO_DISABLED_OPTIMIZERS,
-                        "[BAO] Disable certain query optimizers",
-                        "",
-                        false),
-                stringProperty(
-                        BAO_DISABLED_RULES,
-                        "[BAO] Disable certain query optimizer rewrite rules",
+                        "[BAO] Disable certain query optimizers and rules",
                         "",
                         false),
                 // ***

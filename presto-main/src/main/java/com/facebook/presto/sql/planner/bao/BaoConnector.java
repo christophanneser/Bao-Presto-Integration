@@ -15,14 +15,16 @@ package com.facebook.presto.sql.planner.bao;
 
 import com.facebook.airlift.log.Logger;
 import com.facebook.presto.Session;
+import com.facebook.presto.sql.planner.optimizations.EffectiveOptimizerPart;
 import org.json.simple.JSONArray;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.facebook.presto.SystemSessionProperties.getBaoDriverSocket;
 
@@ -88,47 +90,38 @@ public class BaoConnector
         log.error("Could not notify the benchmark driver!");
     }
 
-    //******************************************************************************
-    // Send execution stats to driver server
-    //******************************************************************************
+    // Send execution stats to Bao
     public void exportExecutionTimeInfo(String json)
     {
         sendData("json:" + json);
     }
 
+    // Send graphviz query plan to Bao
     public void exportGraphivzPlan(String graphviz)
     {
         sendData("dot:" + graphviz);
     }
 
+    // Send json query plan to Bao
     public void exportJsonPlan(String json)
     {
         sendData("json:" + json);
     }
 
-    //******************************************************************************
-    // Export optimizers steps (1-81)
-    //******************************************************************************
-    public void exportEffectiveOptimizers(List<String> effectiveOptimizers)
+    // Send effective optimizers to Bao
+    public void exportEffectiveOptimizerParts(Collection<EffectiveOptimizerPart> effectiveOptimizerParts)
     {
-        sendData("json:optimizers:effective:" + JSONArray.toJSONString(effectiveOptimizers));
+        exportOptimizers("effective", effectiveOptimizerParts);
     }
 
-    public void exportRequiredOptimizers(List<String> requiredOptimizers)
+    // Send required optimizers to Bao
+    public void exportRequiredOptimizerParts(Collection<EffectiveOptimizerPart> effectiveOptimizerParts)
     {
-        sendData("json:optimizers:required:" + JSONArray.toJSONString(requiredOptimizers));
+        exportOptimizers("required", effectiveOptimizerParts);
     }
 
-    //******************************************************************************
-    // Export rules (1-100)
-    //******************************************************************************
-    public void exportEffectiveRules(List<String> effectiveRules)
+    private void exportOptimizers(String type, Collection<EffectiveOptimizerPart> effectiveOptimizers)
     {
-        sendData("json:rules:effective:" + JSONArray.toJSONString(effectiveRules));
-    }
-
-    public void exportRequiredRules(List<String> requiredRules)
-    {
-        sendData("json:rules:required:" + JSONArray.toJSONString(requiredRules));
+        sendData("json:span:" + type + ":" + JSONArray.toJSONString(effectiveOptimizers.stream().map(EffectiveOptimizerPart::toJSON).collect(Collectors.toList())));
     }
 }

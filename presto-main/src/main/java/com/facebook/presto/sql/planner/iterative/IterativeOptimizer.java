@@ -182,7 +182,7 @@ public class IterativeOptimizer
                 // *** Bao integration
                 // check if the rule is enabled; skip otherwise
                 String ruleName = getRuleName(rule);
-                if (!context.session.getOptimizerConfiguration().isRuleEnabled(ruleName)) {
+                if (!context.session.getOptimizerConfiguration().isOptimizerEnabled(ruleName)) {
                     continue;
                 }
                 // ***
@@ -191,10 +191,9 @@ public class IterativeOptimizer
 
                 if (result.getTransformedPlan().isPresent()) {
                     if (SystemSessionProperties.isGetQuerySpan(context.session)) {
-                        context.session.getOptimizerConfiguration().registerRuleHit(ruleName); // *** Bao integration
+                        context.session.getOptimizerConfiguration().registerEffectiveRule(ruleName); // *** Bao integration
                     }
                     node = context.memo.replace(group, result.getTransformedPlan().get(), rule.getClass().getName());
-
                     done = false;
                     progress = true;
                 }

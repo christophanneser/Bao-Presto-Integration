@@ -52,7 +52,9 @@ import com.facebook.presto.sql.analyzer.RelationType;
 import com.facebook.presto.sql.analyzer.Scope;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.StatisticsAggregationPlanner.TableStatisticAggregation;
+import com.facebook.presto.sql.planner.optimizations.EffectiveOptimizerPart;
 import com.facebook.presto.sql.planner.optimizations.OptimizerConfiguration;
+import com.facebook.presto.sql.planner.optimizations.OptimizerType;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.DeleteNode;
 import com.facebook.presto.sql.planner.plan.ExplainAnalyzeNode;
@@ -261,11 +263,11 @@ public class LogicalPlanner
                 if (enableVerboseRuntimeStats) {
                     session.getRuntimeStats().addMetricValue(String.format("optimizer%sTimeNanos", optimizer.getClass().getSimpleName()), System.nanoTime() - start);
                 }
-                // todo track which optimizers actually modify the plan here ...
+                // track which optimizers actually modify the plan here
                 if (getQuerySpan) {
                     int newHash = optimizerConfiguration.hashPlan(root);
                     if (newHash != hash || optimizerConfiguration.appliedCurrentOptimizer) {
-                        optimizerConfiguration.effectiveOptimizers.add(optimizerName);
+                        optimizerConfiguration.registerEffectiveOptimizer(optimizerName);
                         hash = newHash;
                     }
                 }

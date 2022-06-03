@@ -52,7 +52,6 @@ import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.SystemSessionProperties.BAO_DISABLED_OPTIMIZERS;
-import static com.facebook.presto.SystemSessionProperties.BAO_DISABLED_RULES;
 import static com.facebook.presto.SystemSessionProperties.isLegacyMapSubscript;
 import static com.facebook.presto.SystemSessionProperties.isLegacyRowFieldOrdinalAccessEnabled;
 import static com.facebook.presto.SystemSessionProperties.isLegacyTimestamp;
@@ -141,7 +140,7 @@ public final class Session
         this.sessionPropertyManager = requireNonNull(sessionPropertyManager, "sessionPropertyManager is null");
         this.preparedStatements = requireNonNull(preparedStatements, "preparedStatements is null");
         this.sessionFunctions = requireNonNull(sessionFunctions, "sessionFunctions is null");
-        this.optimizerConfiguration = new OptimizerConfiguration(getSystemProperty(BAO_DISABLED_OPTIMIZERS, String.class), getSystemProperty(BAO_DISABLED_RULES, String.class));
+        this.optimizerConfiguration = new OptimizerConfiguration(getSystemProperty(BAO_DISABLED_OPTIMIZERS, String.class));
 
         ImmutableMap.Builder<ConnectorId, Map<String, String>> catalogPropertiesBuilder = ImmutableMap.builder();
         connectorProperties.entrySet().stream()
