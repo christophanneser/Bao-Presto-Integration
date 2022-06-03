@@ -16,13 +16,16 @@ package com.facebook.presto.orc;
 import com.facebook.presto.orc.metadata.CompressionKind;
 import com.facebook.presto.orc.writer.CompressionBufferPool;
 import com.facebook.presto.orc.writer.CompressionBufferPool.LastUsedCompressionBufferPool;
+import com.google.common.collect.ImmutableSet;
 import io.airlift.units.DataSize;
 
 import java.util.OptionalInt;
+import java.util.Set;
 
 import static com.facebook.presto.orc.OrcWriterOptions.DEFAULT_MAX_COMPRESSION_BUFFER_SIZE;
 import static com.facebook.presto.orc.OrcWriterOptions.DEFAULT_MAX_STRING_STATISTICS_LIMIT;
 import static com.facebook.presto.orc.OrcWriterOptions.DEFAULT_PRESERVE_DIRECT_ENCODING_STRIPE_COUNT;
+import static io.airlift.units.DataSize.Unit.BYTE;
 import static java.lang.Math.toIntExact;
 import static java.util.Objects.requireNonNull;
 
@@ -38,6 +41,7 @@ public class ColumnWriterOptions
     private final boolean ignoreDictionaryRowGroupSizes;
     private final int preserveDirectEncodingStripeCount;
     private final CompressionBufferPool compressionBufferPool;
+    private final Set<Integer> flattenedNodes;
 
     public ColumnWriterOptions(
             CompressionKind compressionKind,
@@ -49,7 +53,8 @@ public class ColumnWriterOptions
             boolean stringDictionaryEncodingEnabled,
             boolean ignoreDictionaryRowGroupSizes,
             int preserveDirectEncodingStripeCount,
-            CompressionBufferPool compressionBufferPool)
+            CompressionBufferPool compressionBufferPool,
+            Set<Integer> flattenedNodes)
     {
         this.compressionKind = requireNonNull(compressionKind, "compressionKind is null");
         this.compressionLevel = requireNonNull(compressionLevel, "compressionLevel is null");
@@ -62,6 +67,7 @@ public class ColumnWriterOptions
         this.ignoreDictionaryRowGroupSizes = ignoreDictionaryRowGroupSizes;
         this.preserveDirectEncodingStripeCount = preserveDirectEncodingStripeCount;
         this.compressionBufferPool = requireNonNull(compressionBufferPool, "compressionBufferPool is null");
+        this.flattenedNodes = requireNonNull(flattenedNodes, "flattenedNodes is null");
     }
 
     public CompressionKind getCompressionKind()
@@ -114,6 +120,38 @@ public class ColumnWriterOptions
         return compressionBufferPool;
     }
 
+    public Set<Integer> getFlattenedNodes()
+    {
+        return flattenedNodes;
+    }
+
+    /**
+     * Create a copy of this ColumnWriterOptions, but disable string and integer dictionary encodings.
+     */
+    public ColumnWriterOptions copyWithDisabledDictionaryEncoding()
+    {
+        return toBuilder()
+                .setStringDictionaryEncodingEnabled(false)
+                .setIntegerDictionaryEncodingEnabled(false)
+                .build();
+    }
+
+    public Builder toBuilder()
+    {
+        return new Builder()
+                .setCompressionKind(getCompressionKind())
+                .setCompressionLevel(getCompressionLevel())
+                .setCompressionMaxBufferSize(new DataSize(getCompressionMaxBufferSize(), BYTE))
+                .setStringStatisticsLimit(new DataSize(getStringStatisticsLimit(), BYTE))
+                .setIntegerDictionaryEncodingEnabled(isIntegerDictionaryEncodingEnabled())
+                .setStringDictionarySortingEnabled(isStringDictionarySortingEnabled())
+                .setStringDictionaryEncodingEnabled(isStringDictionaryEncodingEnabled())
+                .setIgnoreDictionaryRowGroupSizes(isIgnoreDictionaryRowGroupSizes())
+                .setPreserveDirectEncodingStripeCount(getPreserveDirectEncodingStripeCount())
+                .setCompressionBufferPool(getCompressionBufferPool())
+                .setFlattenedNodes(getFlattenedNodes());
+    }
+
     public static Builder builder()
     {
         return new Builder();
@@ -131,6 +169,7 @@ public class ColumnWriterOptions
         private boolean ignoreDictionaryRowGroupSizes;
         private int preserveDirectEncodingStripeCount = DEFAULT_PRESERVE_DIRECT_ENCODING_STRIPE_COUNT;
         private CompressionBufferPool compressionBufferPool = new LastUsedCompressionBufferPool();
+        private Set<Integer> flattenedNodes = ImmutableSet.of();
 
         private Builder() {}
 
@@ -194,6 +233,12 @@ public class ColumnWriterOptions
             return this;
         }
 
+        public Builder setFlattenedNodes(Set<Integer> flattenedNodes)
+        {
+            this.flattenedNodes = ImmutableSet.copyOf(flattenedNodes);
+            return this;
+        }
+
         public ColumnWriterOptions build()
         {
             return new ColumnWriterOptions(
@@ -206,7 +251,8 @@ public class ColumnWriterOptions
                     stringDictionaryEncodingEnabled,
                     ignoreDictionaryRowGroupSizes,
                     preserveDirectEncodingStripeCount,
-                    compressionBufferPool);
+                    compressionBufferPool,
+                    flattenedNodes);
         }
     }
 }

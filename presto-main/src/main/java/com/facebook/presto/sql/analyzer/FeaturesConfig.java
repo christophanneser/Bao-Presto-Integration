@@ -95,6 +95,7 @@ public class FeaturesConfig
     private int optimizeMetadataQueriesCallThreshold = 100;
     private boolean optimizeHashGeneration = true;
     private boolean enableIntermediateAggregations;
+    private boolean optimizeCaseExpressionPredicate;
     private boolean pushTableWriteThroughUnion = true;
     private boolean exchangeCompressionEnabled;
     private boolean exchangeChecksumEnabled;
@@ -219,6 +220,7 @@ public class FeaturesConfig
 
     private boolean streamingForPartialAggregationEnabled;
     private boolean preferMergeJoin;
+    private boolean segmentedAggregationEnabled;
 
     private int maxStageCountForEagerScheduling = 25;
     private boolean quickDistinctLimitEnabled;
@@ -870,6 +872,18 @@ public class FeaturesConfig
     public FeaturesConfig setOptimizeTopNRowNumber(boolean optimizeTopNRowNumber)
     {
         this.optimizeTopNRowNumber = optimizeTopNRowNumber;
+        return this;
+    }
+
+    public boolean isOptimizeCaseExpressionPredicate()
+    {
+        return optimizeCaseExpressionPredicate;
+    }
+
+    @Config("optimizer.optimize-case-expression-predicate")
+    public FeaturesConfig setOptimizeCaseExpressionPredicate(boolean optimizeCaseExpressionPredicate)
+    {
+        this.optimizeCaseExpressionPredicate = optimizeCaseExpressionPredicate;
         return this;
     }
 
@@ -2055,6 +2069,18 @@ public class FeaturesConfig
     public FeaturesConfig setPreferMergeJoin(boolean preferMergeJoin)
     {
         this.preferMergeJoin = preferMergeJoin;
+        return this;
+    }
+
+    public boolean isSegmentedAggregationEnabled()
+    {
+        return segmentedAggregationEnabled;
+    }
+
+    @Config("optimizer.segmented-aggregation-enabled")
+    public FeaturesConfig setSegmentedAggregationEnabled(boolean segmentedAggregationEnabled)
+    {
+        this.segmentedAggregationEnabled = segmentedAggregationEnabled;
         return this;
     }
 

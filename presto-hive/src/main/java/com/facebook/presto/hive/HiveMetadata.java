@@ -76,6 +76,7 @@ import com.facebook.presto.spi.SystemTable;
 import com.facebook.presto.spi.TableLayoutFilterCoverage;
 import com.facebook.presto.spi.TableNotFoundException;
 import com.facebook.presto.spi.ViewNotFoundException;
+import com.facebook.presto.spi.connector.ConnectorCommitHandle;
 import com.facebook.presto.spi.connector.ConnectorOutputMetadata;
 import com.facebook.presto.spi.connector.ConnectorPartitioningHandle;
 import com.facebook.presto.spi.connector.ConnectorPartitioningMetadata;
@@ -85,7 +86,6 @@ import com.facebook.presto.spi.plan.FilterStatsCalculatorService;
 import com.facebook.presto.spi.relation.RowExpression;
 import com.facebook.presto.spi.relation.RowExpressionService;
 import com.facebook.presto.spi.relation.SpecialFormExpression;
-import com.facebook.presto.spi.security.ConnectorIdentity;
 import com.facebook.presto.spi.security.GrantInfo;
 import com.facebook.presto.spi.security.PrestoPrincipal;
 import com.facebook.presto.spi.security.Privilege;
@@ -223,6 +223,7 @@ import static com.facebook.presto.hive.HiveSessionProperties.isFileRenamingEnabl
 import static com.facebook.presto.hive.HiveSessionProperties.isOfflineDataDebugModeEnabled;
 import static com.facebook.presto.hive.HiveSessionProperties.isOptimizedMismatchedBucketCount;
 import static com.facebook.presto.hive.HiveSessionProperties.isOptimizedPartitionUpdateSerializationEnabled;
+import static com.facebook.presto.hive.HiveSessionProperties.isOrderBasedExecutionEnabled;
 import static com.facebook.presto.hive.HiveSessionProperties.isParquetPushdownFilterEnabled;
 import static com.facebook.presto.hive.HiveSessionProperties.isPreferManifestsToListFiles;
 import static com.facebook.presto.hive.HiveSessionProperties.isRespectTableFormat;
@@ -230,7 +231,6 @@ import static com.facebook.presto.hive.HiveSessionProperties.isShufflePartitione
 import static com.facebook.presto.hive.HiveSessionProperties.isSortedWriteToTempPathEnabled;
 import static com.facebook.presto.hive.HiveSessionProperties.isSortedWritingEnabled;
 import static com.facebook.presto.hive.HiveSessionProperties.isStatisticsEnabled;
-import static com.facebook.presto.hive.HiveSessionProperties.isStreamingAggregationEnabled;
 import static com.facebook.presto.hive.HiveSessionProperties.isUsePageFileForHiveUnsupportedType;
 import static com.facebook.presto.hive.HiveSessionProperties.shouldCreateEmptyBucketFilesForTemporaryTable;
 import static com.facebook.presto.hive.HiveStorageFormat.AVRO;
@@ -298,9 +298,12 @@ import static com.facebook.presto.hive.metastore.MetastoreUtil.AVRO_SCHEMA_URL_K
 import static com.facebook.presto.hive.metastore.MetastoreUtil.PRESTO_MATERIALIZED_VIEW_FLAG;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.PRESTO_QUERY_ID_NAME;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.PRESTO_VIEW_FLAG;
+import static com.facebook.presto.hive.metastore.MetastoreUtil.extractPartitionValues;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.getHiveSchema;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.getMetastoreHeaders;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.getProtectMode;
+import static com.facebook.presto.hive.metastore.MetastoreUtil.isDeltaLakeTable;
+import static com.facebook.presto.hive.metastore.MetastoreUtil.isIcebergTable;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.isUserDefinedTypeEncodingEnabled;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.toPartitionValues;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.verifyOnline;
@@ -623,6 +626,10 @@ public class HiveMetadata
         Optional<Table> table = metastore.getTable(metastoreContext, tableName.getSchemaName(), tableName.getTableName());
         if (!table.isPresent() || table.get().getTableType().equals(VIRTUAL_VIEW)) {
             throw new TableNotFoundException(tableName);
+        }
+
+        if (isIcebergTable(table.get()) || isDeltaLakeTable(table.get())) {
+            throw new PrestoException(HIVE_UNSUPPORTED_FORMAT, format("Not a Hive table '%s'", tableName));
         }
 
         Function<HiveColumnHandle, ColumnMetadata> metadataGetter = columnMetadataGetter(table.get(), typeManager, metastoreContext.getColumnConverter());
@@ -1665,7 +1672,7 @@ public class HiveMetadata
             HdfsContext hdfsContext = new HdfsContext(session, table.getDatabaseName(), table.getTableName(), table.getStorage().getLocation(), true);
             for (PartitionUpdate partitionUpdate : partitionUpdatesForMissingBuckets) {
                 Optional<Partition> partition = table.getPartitionColumns().isEmpty() ? Optional.empty() :
-                        Optional.of(partitionObjectBuilder.buildPartitionObject(session, table, partitionUpdate, prestoVersion, partitionEncryptionParameters));
+                        Optional.of(partitionObjectBuilder.buildPartitionObject(session, table, partitionUpdate, prestoVersion, partitionEncryptionParameters, Optional.empty()));
                 zeroRowFileCreator.createFiles(
                         session,
                         hdfsContext,
@@ -1708,7 +1715,7 @@ public class HiveMetadata
                 // Store list of file names and sizes in partition metadata when prefer_manifests_to_list_files and file_renaming_enabled are set to true
                 partitionParameters = updatePartitionMetadataWithFileNamesAndSizes(update, partitionParameters);
             }
-            Partition partition = partitionObjectBuilder.buildPartitionObject(session, table, update, prestoVersion, partitionParameters);
+            Partition partition = partitionObjectBuilder.buildPartitionObject(session, table, update, prestoVersion, partitionParameters, Optional.empty());
             PartitionStatistics partitionStatistics = createPartitionStatistics(
                     session,
                     update.getStatistics(),
@@ -1720,7 +1727,7 @@ public class HiveMetadata
                     handle.getTableName(),
                     table.getStorage().getLocation(),
                     true,
-                    partitionObjectBuilder.buildPartitionObject(session, table, update, prestoVersion, partitionParameters),
+                    partitionObjectBuilder.buildPartitionObject(session, table, update, prestoVersion, partitionParameters, Optional.empty()),
                     update.getWritePath(),
                     partitionStatistics);
         }
@@ -1987,7 +1994,8 @@ public class HiveMetadata
                                 prestoVersion,
                                 handle.getEncryptionInformation()
                                         .map(encryptionInfo -> encryptionInfo.getDwrfEncryptionMetadata().map(DwrfEncryptionMetadata::getExtraMetadata).orElseGet(ImmutableMap::of))
-                                        .orElseGet(ImmutableMap::of)));
+                                        .orElseGet(ImmutableMap::of),
+                                Optional.empty()));
                 zeroRowFileCreator.createFiles(
                         session,
                         hdfsContext,
@@ -2006,7 +2014,7 @@ public class HiveMetadata
                 .collect(toImmutableMap(HiveColumnHandle::getName, column -> column.getHiveType().getType(typeManager)));
         Map<List<String>, ComputedStatistics> partitionComputedStatistics = createComputedStatisticsToPartitionMap(computedStatistics, partitionedBy, columnTypes);
 
-        Set<String> existingPartitions = getExistingPartitionNames(session.getIdentity(), metastoreContext, handle.getSchemaName(), handle.getTableName(), partitionUpdates);
+        Map<String, Optional<Partition>> existingPartitions = getExistingPartitionsByNames(metastoreContext, handle.getSchemaName(), handle.getTableName(), partitionUpdates);
 
         for (PartitionUpdate partitionUpdate : partitionUpdates) {
             if (partitionUpdate.getName().isEmpty()) {
@@ -2062,33 +2070,37 @@ public class HiveMetadata
                 // Track the manifest blob size
                 getManifestSizeInBytes(session, partitionUpdate, extraPartitionMetadata).ifPresent(hivePartitionStats::addManifestSizeInBytes);
 
-                // insert into new partition or overwrite existing partition
-                Partition partition = partitionObjectBuilder.buildPartitionObject(
-                        session,
-                        table,
-                        partitionUpdate,
-                        prestoVersion,
-                        extraPartitionMetadata);
-                if (!partition.getStorage().getStorageFormat().getInputFormat().equals(handle.getPartitionStorageFormat().getInputFormat()) && isRespectTableFormat(session)) {
-                    throw new PrestoException(HIVE_CONCURRENT_MODIFICATION_DETECTED, "Partition format changed during insert");
-                }
-                boolean existingPartition = existingPartitions.contains(partitionUpdate.getName());
+                boolean existingPartition = existingPartitions.containsKey(partitionUpdate.getName());
+                Optional<Long> existingPartitionVersion = Optional.empty();
                 if (existingPartition) {
                     // Overwriting an existing partition
                     if (partitionUpdate.getUpdateMode() == OVERWRITE) {
+                        existingPartitionVersion = existingPartitions.get(partitionUpdate.getName()).flatMap(Partition::getPartitionVersion);
                         if (handle.getLocationHandle().getWriteMode() == DIRECT_TO_TARGET_EXISTING_DIRECTORY) {
                             // In this writeMode, the new files will be written to the same directory. Since this is
                             // an overwrite operation, we must remove all the old files not written by current query.
                             removeNonCurrentQueryFiles(session, partitionUpdate.getTargetPath());
                         }
                         else {
-                            metastore.dropPartition(session, handle.getSchemaName(), handle.getTableName(), handle.getLocationHandle().getTargetPath().toString(), partition.getValues());
+                            metastore.dropPartition(session, handle.getSchemaName(), handle.getTableName(), handle.getLocationHandle().getTargetPath().toString(), extractPartitionValues(partitionUpdate.getName()));
                         }
                     }
                     else {
                         throw new PrestoException(HIVE_PARTITION_READ_ONLY, "Cannot insert into an existing partition of Hive table: " + partitionUpdate.getName());
                     }
                 }
+                // insert into new partition or overwrite existing partition
+                Partition partition = partitionObjectBuilder.buildPartitionObject(
+                        session,
+                        table,
+                        partitionUpdate,
+                        prestoVersion,
+                        extraPartitionMetadata,
+                        existingPartitionVersion);
+                if (!partition.getStorage().getStorageFormat().getInputFormat().equals(handle.getPartitionStorageFormat().getInputFormat()) && isRespectTableFormat(session)) {
+                    throw new PrestoException(HIVE_CONCURRENT_MODIFICATION_DETECTED, "Partition format changed during insert");
+                }
+
                 PartitionStatistics partitionStatistics = createPartitionStatistics(
                         session,
                         partitionUpdate.getStatistics(),
@@ -2200,15 +2212,15 @@ public class HiveMetadata
                 .orElse(ImmutableMap.of());
     }
 
-    private Set<String> getExistingPartitionNames(ConnectorIdentity identity, MetastoreContext metastoreContext, String databaseName, String tableName, List<PartitionUpdate> partitionUpdates)
+    private Map<String, Optional<Partition>> getExistingPartitionsByNames(MetastoreContext metastoreContext, String databaseName, String tableName, List<PartitionUpdate> partitionUpdates)
     {
-        ImmutableSet.Builder<String> existingPartitions = ImmutableSet.builder();
+        ImmutableMap.Builder<String, Optional<Partition>> existingPartitions = ImmutableMap.builder();
         ImmutableSet.Builder<String> potentiallyNewPartitions = ImmutableSet.builder();
 
         for (PartitionUpdate update : partitionUpdates) {
             switch (update.getUpdateMode()) {
                 case APPEND:
-                    existingPartitions.add(update.getName());
+                    existingPartitions.put(update.getName(), Optional.empty());
                     break;
                 case NEW:
                 case OVERWRITE:
@@ -2222,9 +2234,8 @@ public class HiveMetadata
         // try to load potentially new partitions in batches to check if any of them exist
         Lists.partition(ImmutableList.copyOf(potentiallyNewPartitions.build()), maxPartitionBatchSize).stream()
                 .flatMap(partitionNames -> metastore.getPartitionsByNames(metastoreContext, databaseName, tableName, partitionNames).entrySet().stream()
-                        .filter(entry -> entry.getValue().isPresent())
-                        .map(Map.Entry::getKey))
-                .forEach(existingPartitions::add);
+                        .filter(entry -> entry.getValue().isPresent()))
+                .forEach(entry -> existingPartitions.put(entry.getKey(), entry.getValue()));
 
         return existingPartitions.build();
     }
@@ -2706,6 +2717,7 @@ public class HiveMetadata
                                 false,
                                 createTableLayoutString(session, handle.getSchemaTableName(), hivePartitionResult.getBucketHandle(), hivePartitionResult.getBucketFilter(), TRUE_CONSTANT, domainPredicate),
                                 desiredColumns.map(columns -> columns.stream().map(column -> (HiveColumnHandle) column).collect(toImmutableSet())),
+                                false,
                                 false)),
                 hivePartitionResult.getUnenforcedConstraint()));
     }
@@ -2819,36 +2831,33 @@ public class HiveMetadata
             predicate = createPredicate(partitionColumns, partitions);
         }
 
-        // Expose ordering property of the table.
-        ImmutableList.Builder<LocalProperty<ColumnHandle>> localProperties = ImmutableList.builder();
+        // Expose ordering property of the table when order based execution is enabled.
+        ImmutableList.Builder<LocalProperty<ColumnHandle>> localPropertyBuilder = ImmutableList.builder();
         Optional<Set<ColumnHandle>> streamPartitionColumns = Optional.empty();
-        if (table.getStorage().getBucketProperty().isPresent() && !table.getStorage().getBucketProperty().get().getSortedBy().isEmpty()) {
+        if (table.getStorage().getBucketProperty().isPresent()
+                && !table.getStorage().getBucketProperty().get().getSortedBy().isEmpty()
+                && isOrderBasedExecutionEnabled(session)) {
             ImmutableSet.Builder<ColumnHandle> streamPartitionColumnsBuilder = ImmutableSet.builder();
+            Map<String, ColumnHandle> columnHandles = hiveColumnHandles(table).stream()
+                    .collect(toImmutableMap(HiveColumnHandle::getName, identity()));
 
             // streamPartitioningColumns is how we partition the data across splits.
             // localProperty is how we partition the data within a split.
-            // 1. add partition columns to streamPartitionColumns
-            partitionColumns.forEach(streamPartitionColumnsBuilder::add);
 
-            // 2. add sorted columns to streamPartitionColumns and localProperties
-            HiveBucketProperty bucketProperty = table.getStorage().getBucketProperty().get();
-            Map<String, ColumnHandle> columnHandles = hiveColumnHandles(table).stream()
-                    .collect(toImmutableMap(HiveColumnHandle::getName, identity()));
-            bucketProperty.getSortedBy().forEach(sortingColumn -> {
-                ColumnHandle columnHandle = columnHandles.get(sortingColumn.getColumnName());
-                localProperties.add(new SortingProperty<>(columnHandle, sortingColumn.getOrder().getSortOrder()));
+            // 1. add partition columns and bucketed-by columns to streamPartitionColumns
+            // when order based execution is enabled, splitting is disabled and data is sharded across splits when table is bucketed.
+            partitionColumns.forEach(streamPartitionColumnsBuilder::add);
+            table.getStorage().getBucketProperty().get().getBucketedBy().forEach(bucketedByColumn -> {
+                ColumnHandle columnHandle = columnHandles.get(bucketedByColumn);
                 streamPartitionColumnsBuilder.add(columnHandle);
             });
 
-            // We currently only set streamPartitionColumns when it enables streaming aggregation and also it's eligible to enable streaming aggregation
-            // 1. When the bucket columns are the same as the prefix of the sort columns
-            // 2. When all rows of the same value group are guaranteed to be in the same split. We disable splitting a file when isStreamingAggregationEnabled is true to make sure the property is guaranteed.
-            List<String> sortColumns = bucketProperty.getSortedBy().stream().map(SortingColumn::getColumnName).collect(toImmutableList());
-            if (bucketProperty.getBucketedBy().size() <= sortColumns.size()
-                    && bucketProperty.getBucketedBy().containsAll(sortColumns.subList(0, bucketProperty.getBucketedBy().size()))
-                    && isStreamingAggregationEnabled(session)) {
-                streamPartitionColumns = Optional.of(streamPartitionColumnsBuilder.build());
-            }
+            // 2. add sorted-by columns to localPropertyBuilder
+            table.getStorage().getBucketProperty().get().getSortedBy().forEach(sortingColumn -> {
+                ColumnHandle columnHandle = columnHandles.get(sortingColumn.getColumnName());
+                localPropertyBuilder.add(new SortingProperty<>(columnHandle, sortingColumn.getOrder().getSortOrder()));
+            });
+            streamPartitionColumns = Optional.of(streamPartitionColumnsBuilder.build());
         }
 
         return new ConnectorTableLayout(
@@ -2858,7 +2867,7 @@ public class HiveMetadata
                 tablePartitioning,
                 streamPartitionColumns,
                 discretePredicates,
-                localProperties.build(),
+                localPropertyBuilder.build(),
                 Optional.of(hiveLayoutHandle.getRemainingPredicate()));
     }
 
@@ -2978,7 +2987,8 @@ public class HiveMetadata
                 hiveLayoutHandle.isPushdownFilterEnabled(),
                 hiveLayoutHandle.getLayoutString(),
                 hiveLayoutHandle.getRequestedColumns(),
-                hiveLayoutHandle.isPartialAggregationsPushedDown());
+                hiveLayoutHandle.isPartialAggregationsPushedDown(),
+                hiveLayoutHandle.isAppendRowNumberEnabled());
     }
 
     @Override
@@ -3777,9 +3787,9 @@ public class HiveMetadata
     }
 
     @Override
-    public void commit()
+    public ConnectorCommitHandle commit()
     {
-        metastore.commit();
+        return metastore.commit();
     }
 
     @Override

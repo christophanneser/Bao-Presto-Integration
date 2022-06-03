@@ -31,6 +31,7 @@ import com.facebook.presto.orc.metadata.StripeInformation;
 import com.facebook.presto.orc.metadata.statistics.BinaryStatisticsBuilder;
 import com.facebook.presto.orc.metadata.statistics.BooleanStatisticsBuilder;
 import com.facebook.presto.orc.metadata.statistics.ColumnStatistics;
+import com.facebook.presto.orc.metadata.statistics.CountStatisticsBuilder;
 import com.facebook.presto.orc.metadata.statistics.DateStatisticsBuilder;
 import com.facebook.presto.orc.metadata.statistics.DoubleStatisticsBuilder;
 import com.facebook.presto.orc.metadata.statistics.IntegerStatistics;
@@ -75,6 +76,7 @@ import static com.facebook.presto.common.type.StandardTypes.ARRAY;
 import static com.facebook.presto.common.type.StandardTypes.MAP;
 import static com.facebook.presto.common.type.StandardTypes.ROW;
 import static com.facebook.presto.common.type.TimestampType.TIMESTAMP;
+import static com.facebook.presto.common.type.TimestampType.TIMESTAMP_MICROSECONDS;
 import static com.facebook.presto.common.type.TinyintType.TINYINT;
 import static com.facebook.presto.common.type.VarbinaryType.VARBINARY;
 import static com.facebook.presto.orc.OrcWriteValidation.OrcWriteValidationMode.BOTH;
@@ -225,10 +227,6 @@ public class OrcWriteValidation
 
         int rowGroupCount = expectedRowGroupStatistics.size();
         for (Entry<StreamId, List<RowGroupIndex>> entry : actualRowGroupStatistics.entrySet()) {
-            // TODO: Remove once the Presto writer supports flat map
-            if (entry.getKey().getSequence() > 0) {
-                throw new OrcCorruptionException(orcDataSourceId, "Unexpected sequence ID for column %s at offset %s", entry.getKey().getColumn(), stripeOffset);
-            }
             if (entry.getValue().size() != rowGroupCount) {
                 throw new OrcCorruptionException(orcDataSourceId, "Unexpected row group count stripe in at offset %s", stripeOffset);
             }
@@ -557,6 +555,16 @@ public class OrcWriteValidation
                 }
             }
 
+            if (type.getTypeSignature().getBase().equals(StandardTypes.TIMESTAMP_MICROSECONDS)) {
+                // A flaw in ORC encoding makes it impossible to represent timestamp
+                // between 1969-12-31 23:59:59.000000, exclusive, and 1970-01-01 00:00:00.000000, exclusive.
+                // Therefore, such data won't round trip. The data read back is expected to be 1 second later than the original value.
+                long micros = TIMESTAMP_MICROSECONDS.getLong(block, position);
+                if (micros > -1_000_000 && micros < 0) {
+                    return AbstractLongType.hash(micros + 1_000_000);
+                }
+            }
+
             return type.hash(block, position);
         }
 
@@ -679,7 +687,7 @@ public class OrcWriteValidation
                 fieldExtractor = ignored -> ImmutableList.of();
                 fieldBuilders = ImmutableList.of();
             }
-            else if (TIMESTAMP.equals(type)) {
+            else if (TIMESTAMP.equals(type) || TIMESTAMP_MICROSECONDS.equals(type)) {
                 statisticsBuilder = new CountStatisticsBuilder();
                 fieldExtractor = ignored -> ImmutableList.of();
                 fieldBuilders = ImmutableList.of();
@@ -743,28 +751,6 @@ public class OrcWriteValidation
         {
             output.add(statisticsBuilder.buildColumnStatistics());
             fieldBuilders.forEach(fieldBuilders -> fieldBuilders.build(output));
-        }
-    }
-
-    private static class CountStatisticsBuilder
-            implements StatisticsBuilder
-    {
-        private long rowCount;
-
-        @Override
-        public void addBlock(Type type, Block block)
-        {
-            for (int position = 0; position < block.getPositionCount(); position++) {
-                if (!block.isNull(position)) {
-                    rowCount++;
-                }
-            }
-        }
-
-        @Override
-        public ColumnStatistics buildColumnStatistics()
-        {
-            return new ColumnStatistics(rowCount, null);
         }
     }
 

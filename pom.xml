@@ -10,7 +10,7 @@
 
     <groupId>com.facebook.presto</groupId>
     <artifactId>presto-root</artifactId>
-    <version>0.273-SNAPSHOT</version>
+    <version>0.274-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>presto-root</name>
@@ -45,7 +45,7 @@
         <air.maven.version>3.3.9</air.maven.version>
 
         <dep.antlr.version>4.7.1</dep.antlr.version>
-        <dep.airlift.version>0.202</dep.airlift.version>
+        <dep.airlift.version>0.203</dep.airlift.version>
         <dep.packaging.version>${dep.airlift.version}</dep.packaging.version>
         <dep.slice.version>0.38</dep.slice.version>
         <dep.testing-mysql-server-5.version>0.6</dep.testing-mysql-server-5.version>
@@ -70,7 +70,7 @@
         <dep.pinot.version>0.10.0</dep.pinot.version>
         <dep.druid.version>0.19.0</dep.druid.version>
         <dep.jaxb.version>2.3.1</dep.jaxb.version>
-        <dep.hudi.version>0.10.1</dep.hudi.version>
+        <dep.hudi.version>0.11.0</dep.hudi.version>
         <dep.testcontainers.version>1.15.1</dep.testcontainers.version>
         <dep.docker-java.version>3.2.12</dep.docker-java.version>
         <!--
@@ -1236,6 +1236,14 @@
                     <exclusion>
                         <groupId>org.apache.hudi</groupId>
                         <artifactId>hudi-hadoop-mr-bundle</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>parquet-avro</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.avro</groupId>
+                        <artifactId>avro</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

@@ -170,6 +170,7 @@ public final class SystemSessionProperties
     public static final String PARTIAL_AGGREGATION_STRATEGY = "partial_aggregation_strategy";
     public static final String PARTIAL_AGGREGATION_BYTE_REDUCTION_THRESHOLD = "partial_aggregation_byte_reduction_threshold";
     public static final String OPTIMIZE_TOP_N_ROW_NUMBER = "optimize_top_n_row_number";
+    public static final String OPTIMIZE_CASE_EXPRESSION_PREDICATE = "optimize_case_expression_predicate";
     public static final String MAX_GROUPING_SETS = "max_grouping_sets";
     public static final String LEGACY_UNNEST = "legacy_unnest";
     public static final String STATISTICS_CPU_TIMER_ENABLED = "statistics_cpu_timer_enabled";
@@ -234,6 +235,7 @@ public final class SystemSessionProperties
     public static final String MAX_STAGE_COUNT_FOR_EAGER_SCHEDULING = "max_stage_count_for_eager_scheduling";
     public static final String HYPERLOGLOG_STANDARD_ERROR_WARNING_THRESHOLD = "hyperloglog_standard_error_warning_threshold";
     public static final String PREFER_MERGE_JOIN = "prefer_merge_join";
+    public static final String SEGMENTED_AGGREGATION_ENABLED = "segmented_aggregation_enabled";
 
     //TODO: Prestissimo related session properties that are temporarily put here. They will be relocated in the future
     public static final String PRESTISSIMO_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -903,6 +905,11 @@ public final class SystemSessionProperties
                         "Use top N row number optimization",
                         featuresConfig.isOptimizeTopNRowNumber(),
                         false),
+                booleanProperty(
+                        OPTIMIZE_CASE_EXPRESSION_PREDICATE,
+                        "Optimize case expression predicates",
+                        featuresConfig.isOptimizeCaseExpressionPredicate(),
+                        false),
                 integerProperty(
                         MAX_GROUPING_SETS,
                         "Maximum number of grouping sets in a GROUP BY",
@@ -1242,6 +1249,11 @@ public final class SystemSessionProperties
                         "Prefer merge join for sorted join inputs, e.g., tables pre-sorted, pre-partitioned by join columns." +
                                 "To make it work, the connector needs to guarantee and expose the data properties of the underlying table.",
                         featuresConfig.isPreferMergeJoin(),
+                        true),
+                booleanProperty(
+                        SEGMENTED_AGGREGATION_ENABLED,
+                        "Enable segmented aggregation.",
+                        featuresConfig.isSegmentedAggregationEnabled(),
                         true),
                 new PropertyMetadata<>(
                         AGGREGATION_IF_TO_FILTER_REWRITE_STRATEGY,
@@ -1837,6 +1849,11 @@ public final class SystemSessionProperties
         return session.getSystemProperty(OPTIMIZE_TOP_N_ROW_NUMBER, Boolean.class);
     }
 
+    public static boolean isOptimizeCaseExpressionPredicate(Session session)
+    {
+        return session.getSystemProperty(OPTIMIZE_CASE_EXPRESSION_PREDICATE, Boolean.class);
+    }
+
     public static boolean isDistributedSortEnabled(Session session)
     {
         return session.getSystemProperty(DISTRIBUTED_SORT, Boolean.class);
@@ -2172,6 +2189,11 @@ public final class SystemSessionProperties
     public static boolean preferMergeJoin(Session session)
     {
         return session.getSystemProperty(PREFER_MERGE_JOIN, Boolean.class);
+    }
+
+    public static boolean isSegmentedAggregationEnabled(Session session)
+    {
+        return session.getSystemProperty(SEGMENTED_AGGREGATION_ENABLED, Boolean.class);
     }
 
     public static AggregationIfToFilterRewriteStrategy getAggregationIfToFilterRewriteStrategy(Session session)

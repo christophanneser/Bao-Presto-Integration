@@ -11,18 +11,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.iceberg;
+package com.facebook.presto.iceberg.nessie;
 
-import org.testng.annotations.Test;
-
-import static com.facebook.presto.iceberg.CatalogType.HADOOP;
-
-@Test
-public class TestIcebergDistributedHadoop
-        extends TestAbstractIcebergDistributed
+public enum AuthenticationType
 {
-    public TestIcebergDistributedHadoop()
-    {
-        super(HADOOP);
-    }
+    BASIC,
+    BEARER
 }

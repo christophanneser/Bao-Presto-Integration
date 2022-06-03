@@ -11,18 +11,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.iceberg;
+package com.facebook.presto.iceberg.hadoop;
 
-import org.testng.annotations.Test;
+import com.facebook.presto.iceberg.TestAbstractIcebergSmoke;
 
-import static com.facebook.presto.iceberg.CatalogType.HIVE;
+import static com.facebook.presto.iceberg.CatalogType.HADOOP;
 
-@Test
-public class TestIcebergDistributedHive
-        extends TestAbstractIcebergDistributed
+public class TestIcebergSmokeHadoop
+        extends TestAbstractIcebergSmoke
 {
-    public TestIcebergDistributedHive()
+    public TestIcebergSmokeHadoop()
     {
-        super(HIVE);
+        super(HADOOP);
     }
 }
