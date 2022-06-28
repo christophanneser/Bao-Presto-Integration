@@ -15,6 +15,7 @@ package com.facebook.presto.hive;
 
 import com.facebook.presto.Session;
 import com.facebook.presto.sql.planner.assertions.PlanMatchPattern;
+import com.facebook.presto.sql.planner.plan.JoinNode.Type;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.AbstractTestQueryFramework;
 import com.google.common.collect.ImmutableList;
@@ -24,6 +25,7 @@ import org.testng.annotations.Test;
 import java.util.List;
 import java.util.Optional;
 
+import static com.facebook.presto.SystemSessionProperties.GROUPED_EXECUTION;
 import static com.facebook.presto.SystemSessionProperties.PREFER_MERGE_JOIN;
 import static com.facebook.presto.hive.HiveQueryRunner.HIVE_CATALOG;
 import static com.facebook.presto.hive.HiveSessionProperties.ORDER_BASED_EXECUTION_ENABLED;
@@ -32,7 +34,10 @@ import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.equiJo
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.join;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.mergeJoin;
 import static com.facebook.presto.sql.planner.plan.JoinNode.DistributionType.PARTITIONED;
+import static com.facebook.presto.sql.planner.plan.JoinNode.Type.FULL;
 import static com.facebook.presto.sql.planner.plan.JoinNode.Type.INNER;
+import static com.facebook.presto.sql.planner.plan.JoinNode.Type.LEFT;
+import static com.facebook.presto.sql.planner.plan.JoinNode.Type.RIGHT;
 import static io.airlift.tpch.TpchTable.CUSTOMER;
 import static io.airlift.tpch.TpchTable.LINE_ITEM;
 import static io.airlift.tpch.TpchTable.NATION;
@@ -49,6 +54,53 @@ public class TestMergeJoinPlan
                 ImmutableList.of(ORDERS, LINE_ITEM, CUSTOMER, NATION),
                 ImmutableMap.of(),
                 Optional.empty());
+    }
+
+    @Test
+    public void testJoinType()
+    {
+        QueryRunner queryRunner = getQueryRunner();
+
+        try {
+            queryRunner.execute("CREATE TABLE test_join_customer_join_type WITH ( \n" +
+                    "  bucket_count = 4, bucketed_by = ARRAY['custkey'], \n" +
+                    "  sorted_by = ARRAY['custkey'], partitioned_by=array['ds']) AS \n" +
+                    "SELECT *, '2021-07-11' as ds FROM tpch.sf1.customer LIMIT 1000");
+
+            queryRunner.execute("CREATE TABLE test_join_order_join_type WITH ( \n" +
+                    "  bucket_count = 4, bucketed_by = ARRAY['custkey'], \n" +
+                    "  sorted_by = ARRAY['custkey'], partitioned_by=array['ds']) AS \n" +
+                    "SELECT *, '2021-07-11' as ds FROM tpch.sf1.\"orders\" LIMIT 1000");
+
+            // When merge join session property is turned on and data properties requirements for merge join are met
+            // Inner join
+            assertPlan(
+                    mergeJoinEnabled(),
+                    "select * from test_join_customer_join_type join test_join_order_join_type on test_join_customer_join_type.custkey = test_join_order_join_type.custkey",
+                    joinPlan("test_join_customer_join_type", "test_join_order_join_type", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, true));
+
+            // Left join
+            assertPlan(
+                    mergeJoinEnabled(),
+                    "select * from test_join_customer_join_type left join test_join_order_join_type on test_join_customer_join_type.custkey = test_join_order_join_type.custkey",
+                    joinPlan("test_join_customer_join_type", "test_join_order_join_type", ImmutableList.of("custkey"), ImmutableList.of("custkey"), LEFT, false));
+
+            // Right join
+            assertPlan(
+                    mergeJoinEnabled(),
+                    "select * from test_join_customer_join_type right join test_join_order_join_type on test_join_customer_join_type.custkey = test_join_order_join_type.custkey",
+                    joinPlan("test_join_customer_join_type", "test_join_order_join_type", ImmutableList.of("custkey"), ImmutableList.of("custkey"), RIGHT, false));
+
+            // Outer join
+            assertPlan(
+                    mergeJoinEnabled(),
+                    "select * from test_join_customer_join_type full join test_join_order_join_type on test_join_customer_join_type.custkey = test_join_order_join_type.custkey",
+                    joinPlan("test_join_customer_join_type", "test_join_order_join_type", ImmutableList.of("custkey"), ImmutableList.of("custkey"), FULL, false));
+        }
+        finally {
+            queryRunner.execute("DROP TABLE IF EXISTS test_join_customer_join_type");
+            queryRunner.execute("DROP TABLE IF EXISTS test_join_order_join_type");
+        }
     }
 
     @Test
@@ -70,18 +122,24 @@ public class TestMergeJoinPlan
             // By default, we can't enable merge join
             assertPlan(
                     "select * from test_join_customer join test_join_order on test_join_customer.custkey = test_join_order.custkey",
-                    joinPlan("test_join_customer", "test_join_order", ImmutableList.of("custkey"), ImmutableList.of("custkey"), false));
+                    joinPlan("test_join_customer", "test_join_order", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, false));
 
             // when we miss session property, we can't enable merge join
             assertPlan(
                     "select * from test_join_customer join test_join_order on test_join_customer.custkey = test_join_order.custkey",
-                    joinPlan("test_join_customer", "test_join_order", ImmutableList.of("custkey"), ImmutableList.of("custkey"), false));
+                    joinPlan("test_join_customer", "test_join_order", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, false));
 
             // When merge join session property is turned on and data properties requirements for merge join are met
             assertPlan(
                     mergeJoinEnabled(),
                     "select * from test_join_customer join test_join_order on test_join_customer.custkey = test_join_order.custkey",
-                    joinPlan("test_join_customer", "test_join_order", ImmutableList.of("custkey"), ImmutableList.of("custkey"), true));
+                    joinPlan("test_join_customer", "test_join_order", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, true));
+
+            // When we miss grouped execution session property, we can't enable merge join
+            assertPlan(
+                    groupedExecutionDisabled(),
+                    "select * from test_join_customer join test_join_order on test_join_customer.custkey = test_join_order.custkey",
+                    joinPlan("test_join_customer", "test_join_order", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, false));
         }
         finally {
             queryRunner.execute("DROP TABLE IF EXISTS test_join_customer");
@@ -109,7 +167,7 @@ public class TestMergeJoinPlan
             assertPlan(
                     mergeJoinEnabled(),
                     "select * from test_join_customer2 join test_join_order2 on test_join_customer2.custkey = test_join_order2.custkey",
-                    joinPlan("test_join_customer2", "test_join_order2", ImmutableList.of("custkey"), ImmutableList.of("custkey"), false));
+                    joinPlan("test_join_customer2", "test_join_order2", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, false));
         }
         finally {
             queryRunner.execute("DROP TABLE IF EXISTS test_join_customer2");
@@ -137,7 +195,7 @@ public class TestMergeJoinPlan
             assertPlan(
                     mergeJoinEnabled(),
                     "select * from test_join_customer3 join test_join_order3 on test_join_customer3.custkey = test_join_order3.custkey",
-                    joinPlan("test_join_customer3", "test_join_order3", ImmutableList.of("custkey"), ImmutableList.of("custkey"), false));
+                    joinPlan("test_join_customer3", "test_join_order3", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, false));
         }
         finally {
             queryRunner.execute("DROP TABLE IF EXISTS test_join_customer3");
@@ -165,7 +223,7 @@ public class TestMergeJoinPlan
             assertPlan(
                     mergeJoinEnabled(),
                     "select * from test_join_customer4 join test_join_order4 on test_join_customer4.custkey = test_join_order4.custkey",
-                    joinPlan("test_join_customer4", "test_join_order4", ImmutableList.of("custkey"), ImmutableList.of("custkey"), true));
+                    joinPlan("test_join_customer4", "test_join_order4", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, true));
         }
         finally {
             queryRunner.execute("DROP TABLE IF EXISTS test_join_customer4");
@@ -200,7 +258,7 @@ public class TestMergeJoinPlan
             assertPlan(
                     mergeJoinEnabled(),
                     "select * from test_join_customer5 join test_join_order5 on test_join_customer5.custkey = test_join_order5.custkey and test_join_customer5.orderkey = test_join_order5.orderkey",
-                    joinPlan("test_join_customer5", "test_join_order5", ImmutableList.of("custkey", "orderkey"), ImmutableList.of("custkey", "orderkey"), true));
+                    joinPlan("test_join_customer5", "test_join_order5", ImmutableList.of("custkey", "orderkey"), ImmutableList.of("custkey", "orderkey"), INNER, true));
         }
         finally {
             queryRunner.execute("DROP TABLE IF EXISTS test_join_customer5");
@@ -232,7 +290,7 @@ public class TestMergeJoinPlan
             assertPlan(
                     mergeJoinEnabled(),
                     "select * from test_join_customer_multi_partitions join test_join_order_multi_partitions on test_join_customer_multi_partitions.custkey = test_join_order_multi_partitions.custkey",
-                    joinPlan("test_join_customer_multi_partitions", "test_join_order_multi_partitions", ImmutableList.of("custkey"), ImmutableList.of("custkey"), false));
+                    joinPlan("test_join_customer_multi_partitions", "test_join_order_multi_partitions", ImmutableList.of("custkey"), ImmutableList.of("custkey"), INNER, false));
         }
         finally {
             queryRunner.execute("DROP TABLE IF EXISTS test_join_customer_multi_partitions");
@@ -240,15 +298,25 @@ public class TestMergeJoinPlan
         }
     }
 
-    private Session mergeJoinEnabled()
+    private Session groupedExecutionDisabled()
     {
         return Session.builder(getQueryRunner().getDefaultSession())
                 .setSystemProperty(PREFER_MERGE_JOIN, "true")
+                .setSystemProperty(GROUPED_EXECUTION, "false")
                 .setCatalogSessionProperty(HIVE_CATALOG, ORDER_BASED_EXECUTION_ENABLED, "true")
                 .build();
     }
 
-    private PlanMatchPattern joinPlan(String leftTableName, String rightTableName, List<String> leftJoinKeys, List<String> rightJoinKeys, boolean mergeJoinEnabled)
+    private Session mergeJoinEnabled()
+    {
+        return Session.builder(getQueryRunner().getDefaultSession())
+                .setSystemProperty(PREFER_MERGE_JOIN, "true")
+                .setSystemProperty(GROUPED_EXECUTION, "true")
+                .setCatalogSessionProperty(HIVE_CATALOG, ORDER_BASED_EXECUTION_ENABLED, "true")
+                .build();
+    }
+
+    private PlanMatchPattern joinPlan(String leftTableName, String rightTableName, List<String> leftJoinKeys, List<String> rightJoinKeys, Type joinType, boolean mergeJoinEnabled)
     {
         int suffix1 = 0;
         int suffix2 = 1;
@@ -265,13 +333,13 @@ public class TestMergeJoinPlan
 
         return mergeJoinEnabled ?
                 anyTree(mergeJoin(
-                        INNER,
+                        joinType,
                         joinClauses.build(),
                         Optional.empty(),
                         PlanMatchPattern.tableScan(leftTableName, leftColumnReferencesBuilder.build()),
                         PlanMatchPattern.tableScan(rightTableName, rightColumnReferencesBuilder.build()))) :
                 anyTree(join(
-                        INNER,
+                        joinType,
                         joinClauses.build(),
                         Optional.empty(),
                         Optional.of(PARTITIONED),

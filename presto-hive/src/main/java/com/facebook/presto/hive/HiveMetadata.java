@@ -81,6 +81,7 @@ import com.facebook.presto.spi.connector.ConnectorOutputMetadata;
 import com.facebook.presto.spi.connector.ConnectorPartitioningHandle;
 import com.facebook.presto.spi.connector.ConnectorPartitioningMetadata;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
+import com.facebook.presto.spi.constraints.TableConstraint;
 import com.facebook.presto.spi.function.StandardFunctionResolution;
 import com.facebook.presto.spi.plan.FilterStatsCalculatorService;
 import com.facebook.presto.spi.relation.RowExpression;
@@ -134,6 +135,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -634,8 +636,18 @@ public class HiveMetadata
 
         Function<HiveColumnHandle, ColumnMetadata> metadataGetter = columnMetadataGetter(table.get(), typeManager, metastoreContext.getColumnConverter());
         ImmutableList.Builder<ColumnMetadata> columns = ImmutableList.builder();
+        Map<String, ColumnHandle> columnNameToHandleAssignments = new HashMap<>();
         for (HiveColumnHandle columnHandle : hiveColumnHandles(table.get())) {
             columns.add(metadataGetter.apply(columnHandle));
+            columnNameToHandleAssignments.put(columnHandle.getName(), columnHandle);
+        }
+
+        List<TableConstraint<ColumnHandle>> tableConstraints = ImmutableList.of();
+
+        if (session.isReadConstraints()) {
+            // Get table constraints and rebase on column handles from column names
+            List<TableConstraint<String>> metastoreTableConstraints = metastore.getTableConstraints(metastoreContext, tableName.getSchemaName(), tableName.getTableName());
+            tableConstraints = ConnectorTableMetadata.rebaseTableConstraints(metastoreTableConstraints, columnNameToHandleAssignments);
         }
 
         // External location property
@@ -710,7 +722,7 @@ public class HiveMetadata
 
         Optional<String> comment = Optional.ofNullable(table.get().getParameters().get(TABLE_COMMENT));
 
-        return new ConnectorTableMetadata(tableName, columns.build(), properties.build(), comment);
+        return new ConnectorTableMetadata(tableName, columns.build(), properties.build(), comment, tableConstraints);
     }
 
     private static Optional<String> getCsvSerdeProperty(Table table, String key)
@@ -2070,12 +2082,12 @@ public class HiveMetadata
                 // Track the manifest blob size
                 getManifestSizeInBytes(session, partitionUpdate, extraPartitionMetadata).ifPresent(hivePartitionStats::addManifestSizeInBytes);
 
-                boolean existingPartition = existingPartitions.containsKey(partitionUpdate.getName());
-                Optional<Long> existingPartitionVersion = Optional.empty();
-                if (existingPartition) {
+                boolean isExistingPartition = existingPartitions.containsKey(partitionUpdate.getName());
+                Optional<Partition> existingPartition = Optional.empty();
+                if (isExistingPartition) {
                     // Overwriting an existing partition
                     if (partitionUpdate.getUpdateMode() == OVERWRITE) {
-                        existingPartitionVersion = existingPartitions.get(partitionUpdate.getName()).flatMap(Partition::getPartitionVersion);
+                        existingPartition = existingPartitions.get(partitionUpdate.getName());
                         if (handle.getLocationHandle().getWriteMode() == DIRECT_TO_TARGET_EXISTING_DIRECTORY) {
                             // In this writeMode, the new files will be written to the same directory. Since this is
                             // an overwrite operation, we must remove all the old files not written by current query.
@@ -2096,7 +2108,7 @@ public class HiveMetadata
                         partitionUpdate,
                         prestoVersion,
                         extraPartitionMetadata,
-                        existingPartitionVersion);
+                        existingPartition);
                 if (!partition.getStorage().getStorageFormat().getInputFormat().equals(handle.getPartitionStorageFormat().getInputFormat()) && isRespectTableFormat(session)) {
                     throw new PrestoException(HIVE_CONCURRENT_MODIFICATION_DETECTED, "Partition format changed during insert");
                 }
@@ -2108,7 +2120,7 @@ public class HiveMetadata
                         getColumnStatistics(partitionComputedStatistics, partition.getValues()));
 
                 // New partition or overwriting existing partition by staging and moving the new partition
-                if (!existingPartition || handle.getLocationHandle().getWriteMode() != DIRECT_TO_TARGET_EXISTING_DIRECTORY) {
+                if (!isExistingPartition || handle.getLocationHandle().getWriteMode() != DIRECT_TO_TARGET_EXISTING_DIRECTORY) {
                     metastore.addPartition(
                             session,
                             handle.getSchemaName(),
