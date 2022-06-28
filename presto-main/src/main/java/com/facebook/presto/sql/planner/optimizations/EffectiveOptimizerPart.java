@@ -15,7 +15,10 @@ package com.facebook.presto.sql.planner.optimizations;
 
 import com.google.common.collect.ImmutableSet;
 import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -90,8 +93,11 @@ public class EffectiveOptimizerPart
         return Objects.hash(name);
     }
 
-    public String toJSON()
+    public JSONObject toJSON()
     {
-        return "{ \"name\": \"" + name + "\",\"dependencies\":" + (JSONArray.toJSONString(optimizerDependencies.stream().map(opt -> opt.name).collect(Collectors.toList()))) + "}";
+        Map<String, Object> json = new HashMap<>();
+        json.put("name", name);
+        json.put("dependencies", optimizerDependencies.stream().map(opt -> opt.name).collect(Collectors.toList()));
+        return new JSONObject(json);
     }
 }
