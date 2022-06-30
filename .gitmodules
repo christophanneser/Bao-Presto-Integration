@@ -1,6 +1,3 @@
 [submodule "presto-native-execution/velox"]
 	path = presto-native-execution/velox
 	url = https://github.com/facebookincubator/velox.git
-[submodule "Bao-for-Presto"]
-	path = Bao-for-Presto
-	url = git@github.com:christophanneser/Bao-for-Presto.git
