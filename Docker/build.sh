@@ -16,11 +16,12 @@ buildConfigs() {
 
 buildConfigs;
 
+docker build  -t presto:cpp-coordinator --build-arg CONFIG=cpp-coordinator-config -f Dockerfile .
+docker build  -t presto:java-coordinator --build-arg CONFIG=java-coordinator-config -f Dockerfile .
+docker build  -t presto:java-worker --build-arg CONFIG=java-worker-config -f Dockerfile .
+
 #copy configs to presto cpp worker
 # rm -rf ~/presto/presto_cpp_container/ctx/worker_config/catalog
 # cp -r configs/catalog ~/presto/presto_cpp_container/ctx/worker_config/
 
-docker build -t presto:cpp-coordinator --build-arg CONFIG=cpp-coordinator-config -f Dockerfile .
-docker build -t presto:java-coordinator --build-arg CONFIG=java-coordinator-config -f Dockerfile .
-docker build -t presto:java-worker --build-arg CONFIG=java-worker-config -f Dockerfile .
 
