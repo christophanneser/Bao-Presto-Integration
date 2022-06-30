@@ -233,7 +233,6 @@ def build_java_execution(options, daemon):
             env['LD_PRELOAD'] = (env.get('LD_PRELOAD', '') + ':' + shim).strip()
             env['PROCNAME'] = process_name
 
-    #  print(command)
     env['LD_PRELOAD'] = (env.get('LD_PRELOAD', '') + ':' + '/usr/local/lib/faketime/libfaketimeMT.so.1').strip()
     env['FAKETIME_DONT_FAKE_MONOTONIC'] = '1'
     env['FAKETIME'] = request_ntp_time()

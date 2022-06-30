@@ -5,7 +5,7 @@ import datetime
 import sys
 import time
 
-HOST = 'localhost'
+HOST = 'ntp'
 PORT = 3333
 
 
@@ -28,6 +28,7 @@ def receive_time(sock):
 
 
 def request_ntp_time():
+    print("request time from ntp")
     s = socket.socket()  # Create a socket object
     s.connect((HOST, PORT))
 
