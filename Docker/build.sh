@@ -3,7 +3,7 @@ sudo echo "got root access"
 
 buildConfigs() {
     rm -rf .configs && mkdir .configs
-    for CONF in cpp-coordinator java-coordinator java-worker; do
+    for CONF in cpp-coordinator java-coordinator java-worker cpp-worker; do
         rm -rf .configs/${CONF}-config && mkdir .configs/${CONF}-config;
         cp -r configs/catalog .configs/${CONF}-config/;
         cp configs/${CONF}-config.properties .configs/${CONF}-config/config.properties;
@@ -16,7 +16,7 @@ buildConfigs() {
 
 buildConfigs;
 
-docker build  -t presto:cpp-coordinator --build-arg CONFIG=cpp-coordinator-config -f Dockerfile .
+# docker build  -t presto:cpp-coordinator --build-arg CONFIG=cpp-coordinator-config -f Dockerfile .
 docker build  -t presto:java-coordinator --build-arg CONFIG=java-coordinator-config -f Dockerfile .
 docker build  -t presto:java-worker --build-arg CONFIG=java-worker-config -f Dockerfile .
 

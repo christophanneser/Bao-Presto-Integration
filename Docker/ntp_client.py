@@ -28,14 +28,21 @@ def receive_time(sock):
 
 
 def request_ntp_time():
-    print("request time from ntp")
-    s = socket.socket()  # Create a socket object
-    s.connect((HOST, PORT))
+    for _ in range(10):
+        try:
+            print("request time from ntp")
+            s = socket.socket()  # Create a socket object
+            s.connect((HOST, PORT))
 
-    rec_time, rtt = receive_time(s)
-    estimated_next_rec_time = rec_time + rtt / 2
-    estimated_time = datetime.datetime.fromtimestamp(estimated_next_rec_time / 1000 + rtt / 2000,
-                                                     tz=datetime.timezone.utc)
-    t = datetime.datetime.now()
-    return estimated_time.strftime("@%Y-%m-%d %H:%M:%S")
+            rec_time, rtt = receive_time(s)
+            estimated_next_rec_time = rec_time + rtt / 2
+            estimated_time = datetime.datetime.fromtimestamp(estimated_next_rec_time / 1000 + rtt / 2000,
+                                                             tz=datetime.timezone.utc)
+            t = datetime.datetime.now()
+            return estimated_time.strftime("@%Y-%m-%d %H:%M:%S")
+        except:
+            print("could not connect, try again in 1 sec")
+            time.sleep(1)
 
+if __name__ == '__main__':
+    request_ntp_time()
