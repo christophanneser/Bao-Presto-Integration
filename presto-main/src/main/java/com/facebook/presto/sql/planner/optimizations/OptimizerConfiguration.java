@@ -188,6 +188,8 @@ public class OptimizerConfiguration
             .add("ValuesRowExpressionRewrite")
             .add("Visitor")
             .add("WindowRowExpressionRewrite")
+            .add("RemoveRedundantAggregateDistinct")
+            .add("RemoveRedundantDistinct")
             .build();
     public static final ImmutableSet<String> optimizerNames = new ImmutableSet.Builder<String>()
             .add("AddLocalExchanges")
