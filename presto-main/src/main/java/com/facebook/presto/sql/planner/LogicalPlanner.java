@@ -257,7 +257,13 @@ public class LogicalPlanner
                 // ***
 
                 long start = System.nanoTime();
-                root = optimizer.optimize(root, session, variableAllocator.getTypes(), variableAllocator, idAllocator, warningCollector);
+                try {
+                    root = optimizer.optimize(root, session, variableAllocator.getTypes(), variableAllocator, idAllocator, warningCollector);
+                } catch (Exception e) {
+                    // error, cannot apply optimizer
+                    System.out.println(e);
+                    throw e;
+                }
                 requireNonNull(root, format("%s returned a null plan", optimizer.getClass().getName()));
                 if (enableVerboseRuntimeStats) {
                     session.getRuntimeStats().addMetricValue(String.format("optimizer%sTimeNanos", optimizer.getClass().getSimpleName()), NANO, System.nanoTime() - start);

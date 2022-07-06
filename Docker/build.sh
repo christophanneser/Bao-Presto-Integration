@@ -23,5 +23,3 @@ docker build  -t presto:java-worker --build-arg CONFIG=java-worker-config -f Doc
 #copy configs to presto cpp worker
 # rm -rf ~/presto/presto_cpp_container/ctx/worker_config/catalog
 # cp -r configs/catalog ~/presto/presto_cpp_container/ctx/worker_config/
-
-

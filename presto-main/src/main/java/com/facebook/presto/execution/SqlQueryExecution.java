@@ -75,6 +75,7 @@ import org.joda.time.DateTime;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -518,7 +519,49 @@ public class SqlQueryExecution
                 // disable effective rule or optimizer and track new effective optimizers
                 EffectiveOptimizerPart optimizerPart = querySpan.next();
                 optimizerPart.disableOptimizerAndDependencies(optimizerConfiguration);
-                detectHitsInLogicalOptimization(requiredOptimizers, querySpan, optimizerPart);
+
+                Set<EffectiveOptimizerPart> disabledOptimizers = new HashSet<>();
+                disabledOptimizers.add(optimizerPart);
+                detectHitsInLogicalOptimization(requiredOptimizers, querySpan, disabledOptimizers);
+            }
+
+            // we know the required optimizers now, remove the found alternative optimizers and run approximation again
+            List<EffectiveOptimizerPart> alternativeOptimizers = new ArrayList<>();
+            for (EffectiveOptimizerPart eop : querySpan.getSeenOptimizers()) {
+                if (!eop.isDefaultOptimizer()) {
+                    alternativeOptimizers.add(eop);
+                }
+            }
+            for (EffectiveOptimizerPart eop : alternativeOptimizers) {
+                querySpan.getSeenOptimizers().remove(eop);
+            }
+
+            int numRequiredOptimizers = requiredOptimizers.size();
+            int numNewEffectiveOptimizers = querySpan.getSeenOptimizers().size();
+            while (numNewEffectiveOptimizers > 0) {
+                // keep track of effective optimizers
+                Set<EffectiveOptimizerPart> effectiveOptimizers = new HashSet<>(querySpan.getSeenOptimizers());
+
+                // enable all optimizers and rules again and find alternative optimizers
+                optimizerConfiguration.reset();
+
+                // disable effective rule or optimizer and track new effective optimizers
+                for (EffectiveOptimizerPart eop : querySpan.getSeenOptimizers()) {
+                    if (requiredOptimizers.contains(eop)) {
+                        continue;
+                    }
+                    eop.disableOptimizerAndDependencies(optimizerConfiguration);
+                }
+
+                detectHitsInLogicalOptimization(requiredOptimizers, querySpan, effectiveOptimizers);
+                if (numRequiredOptimizers < requiredOptimizers.size()) {
+                    // we detected new required optimizers, re-run the detection of alternative rules
+                    numRequiredOptimizers = requiredOptimizers.size();
+                    continue;
+                }
+                Set<EffectiveOptimizerPart> newAlternativeRules = new HashSet<>(effectiveOptimizers);
+                newAlternativeRules.removeAll(querySpan.getSeenOptimizers());
+                numNewEffectiveOptimizers = newAlternativeRules.size();
             }
 
             // send query span to driver
@@ -591,7 +634,7 @@ public class SqlQueryExecution
     }
 
     // todo: disable multiple optimizers at once here to find alternative rules iteratively?
-    private void detectHitsInLogicalOptimization(Set<EffectiveOptimizerPart> requiredOptimizersOrRules, QuerySpan optimizerSpan, EffectiveOptimizerPart optimizerPart)
+    private void detectHitsInLogicalOptimization(Set<EffectiveOptimizerPart> requiredOptimizersOrRules, QuerySpan querySpan, Set<EffectiveOptimizerPart> disabledOptimizer)
     {
         OptimizerConfiguration optimizerConfiguration = getSession().getOptimizerConfiguration();
         LogicalPlanner logicalPlanner;
@@ -605,11 +648,12 @@ public class SqlQueryExecution
 
             // track effective queries here in case the query plan is valid
             HashSet<EffectiveOptimizerPart> effectiveRulesAndOptimizers = new HashSet<>(optimizerConfiguration.getEffectiveOptimizers());
-            optimizerSpan.addAlternativeRulesAndOptimizers(ImmutableSet.of(optimizerPart), effectiveRulesAndOptimizers);
+            querySpan.addAlternativeRulesAndOptimizers(ImmutableSet.copyOf(disabledOptimizer), effectiveRulesAndOptimizers);
         }
         catch (Exception e) {
+            System.out.println(e);
             // Invalid Rule Configuration found -> rule <i> is required!
-            requiredOptimizersOrRules.add(optimizerPart);
+            // todo add all rules ??
         }
     }
 

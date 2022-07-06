@@ -292,7 +292,6 @@ public class OptimizerConfiguration
 
     public void disableOptimizer(String optimizer)
     {
-        optimizersEnabled = createConfigMapFromList();
         if (!optimizersEnabled.containsKey(optimizer)) {
             System.out.println("ERROR: optimizer not found:" + optimizer);
         }
