@@ -85,6 +85,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static com.facebook.presto.SystemSessionProperties.getExecutionPolicy;
 import static com.facebook.presto.SystemSessionProperties.getQueryAnalyzerTimeout;
@@ -510,7 +511,7 @@ public class SqlQueryExecution
                     () -> logicalPlanner.plan(analysis));
             queryPlan.set(plan);
 
-            // initialize the optimizer span with effective default optimizers
+            // initialize the optimizer span with effective default optimizers, used to detect required optimizers
             QuerySpan querySpan = new QuerySpan(optimizerConfiguration.getEffectiveOptimizers());
             while (querySpan.hasNext()) {
                 // enable all optimizers and rules again and find alternative optimizers
@@ -538,6 +539,7 @@ public class SqlQueryExecution
 
             int numRequiredOptimizers = requiredOptimizers.size();
             int numNewEffectiveOptimizers = querySpan.getSeenOptimizers().size();
+            Set<EffectiveOptimizerPart> knownOptimizers = new HashSet<>(querySpan.getSeenOptimizers());
             while (numNewEffectiveOptimizers > 0) {
                 // keep track of effective optimizers
                 Set<EffectiveOptimizerPart> effectiveOptimizers = new HashSet<>(querySpan.getSeenOptimizers());
@@ -559,8 +561,10 @@ public class SqlQueryExecution
                     numRequiredOptimizers = requiredOptimizers.size();
                     continue;
                 }
-                Set<EffectiveOptimizerPart> newAlternativeRules = new HashSet<>(effectiveOptimizers);
-                newAlternativeRules.removeAll(querySpan.getSeenOptimizers());
+                // find new alternative rules
+                Set<EffectiveOptimizerPart> newAlternativeRules = new HashSet<>(querySpan.getSeenOptimizers().stream().filter((EffectiveOptimizerPart e) -> !e.getOptimizerDependencies().isEmpty()).collect(Collectors.toList()));
+                newAlternativeRules.removeAll(knownOptimizers);
+                knownOptimizers.addAll(newAlternativeRules);
                 numNewEffectiveOptimizers = newAlternativeRules.size();
             }
 
@@ -651,9 +655,7 @@ public class SqlQueryExecution
             querySpan.addAlternativeRulesAndOptimizers(ImmutableSet.copyOf(disabledOptimizer), effectiveRulesAndOptimizers);
         }
         catch (Exception e) {
-            System.out.println(e);
-            // Invalid Rule Configuration found -> rule <i> is required!
-            // todo add all rules ??
+            requiredOptimizersOrRules.addAll(disabledOptimizer);
         }
     }
 
