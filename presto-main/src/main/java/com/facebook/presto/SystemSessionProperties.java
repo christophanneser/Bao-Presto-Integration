@@ -76,6 +76,7 @@ public final class SystemSessionProperties
     public static final String BAO_EXPORT_JSON = "json";
     public static final String BAO_EXPORT_TIMES = "report_time";
     public static final String BAO_GET_QUERY_SPAN = "get_query_span";
+    public static final String BAO_QUERY_SPAN_ITERATIVE = "query_span_iterative";
     public static final String BAO_EXECUTE_QUERY = "execute_query";
     public static final String BAO_SOCKET = "bao_socket";
     public static final String BAO_DISABLED_OPTIMIZERS = "bao_disabled_optimizers";
@@ -294,6 +295,11 @@ public final class SystemSessionProperties
                         BAO_GET_QUERY_SPAN,
                         "[BAO] Presto calculates the query span of a query and returns via socket",
                         false,
+                        false),
+                booleanProperty(
+                        BAO_QUERY_SPAN_ITERATIVE,
+                        "[BAO] Approximation algorithm (iterative vs batch)",
+                        true,
                         false),
                 booleanProperty(
                         BAO_EXECUTE_QUERY,
@@ -2190,6 +2196,11 @@ public final class SystemSessionProperties
         return session.getSystemProperty(BAO_GET_QUERY_SPAN, Boolean.class);
     }
 
+    public static boolean isQuerySpanIterativeApproximation(Session session)
+    {
+        return session.getSystemProperty(BAO_QUERY_SPAN_ITERATIVE, Boolean.class);
+    }
+
     public static boolean isExportGraphviz(Session session)
     {
         return session.getSystemProperty(BAO_EXPORT_GRAPHVIZ, Boolean.class);
@@ -2265,11 +2276,6 @@ public final class SystemSessionProperties
         return session.getSystemProperty(BAO_SOCKET, String.class);
     }
 
-    public List<PropertyMetadata<?>> getSessionProperties()
-    {
-        return sessionProperties;
-    }
-
     public static boolean isQuickDistinctLimitEnabled(Session session)
     {
         return session.getSystemProperty(QUICK_DISTINCT_LIMIT_ENABLED, Boolean.class);
@@ -2283,5 +2289,10 @@ public final class SystemSessionProperties
     public static boolean useExternalPlanStatisticsEnabled(Session session)
     {
         return session.getSystemProperty(USE_EXTERNAL_PLAN_STATISTICS, Boolean.class);
+    }
+
+    public List<PropertyMetadata<?>> getSessionProperties()
+    {
+        return sessionProperties;
     }
 }

@@ -75,7 +75,6 @@ import org.joda.time.DateTime;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -513,61 +512,40 @@ public class SqlQueryExecution
 
             // initialize the optimizer span with effective default optimizers, used to detect required optimizers
             QuerySpan querySpan = new QuerySpan(optimizerConfiguration.getEffectiveOptimizers());
-            while (querySpan.hasNext()) {
-                // enable all optimizers and rules again and find alternative optimizers
-                optimizerConfiguration.reset();
 
-                // disable effective rule or optimizer and track new effective optimizers
-                EffectiveOptimizerPart optimizerPart = querySpan.next();
-                optimizerPart.disableOptimizerAndDependencies(optimizerConfiguration);
+            {
+                if (SystemSessionProperties.isQuerySpanIterativeApproximation(getSession())) {
+                    // Approach I: Iteratively disable a single effective optimizer and track the dependencies
+                    // initialize the optimizer span with effective default optimizers, used to detect required optimizers
+                    while (querySpan.hasNext()) {
+                        // enable all optimizers and rules again and find alternative optimizers
+                        optimizerConfiguration.reset();
 
-                Set<EffectiveOptimizerPart> disabledOptimizers = new HashSet<>();
-                disabledOptimizers.add(optimizerPart);
-                detectHitsInLogicalOptimization(requiredOptimizers, querySpan, disabledOptimizers);
-            }
+                        // disable effective rule or optimizer and track new effective optimizers
+                        EffectiveOptimizerPart optimizerPart = querySpan.next();
+                        optimizerPart.disableOptimizerAndDependencies(optimizerConfiguration);
 
-            // we know the required optimizers now, remove the found alternative optimizers and run approximation again
-            List<EffectiveOptimizerPart> alternativeOptimizers = new ArrayList<>();
-            for (EffectiveOptimizerPart eop : querySpan.getSeenOptimizers()) {
-                if (!eop.isDefaultOptimizer()) {
-                    alternativeOptimizers.add(eop);
-                }
-            }
-            for (EffectiveOptimizerPart eop : alternativeOptimizers) {
-                querySpan.getSeenOptimizers().remove(eop);
-            }
-
-            int numRequiredOptimizers = requiredOptimizers.size();
-            int numNewEffectiveOptimizers = querySpan.getSeenOptimizers().size();
-            Set<EffectiveOptimizerPart> knownOptimizers = new HashSet<>(querySpan.getSeenOptimizers());
-            while (numNewEffectiveOptimizers > 0) {
-                // keep track of effective optimizers
-                Set<EffectiveOptimizerPart> effectiveOptimizers = new HashSet<>(querySpan.getSeenOptimizers());
-
-                // enable all optimizers and rules again and find alternative optimizers
-                optimizerConfiguration.reset();
-
-                // disable effective rule or optimizer and track new effective optimizers
-                for (EffectiveOptimizerPart eop : querySpan.getSeenOptimizers()) {
-                    if (requiredOptimizers.contains(eop)) {
-                        continue;
+                        Set<EffectiveOptimizerPart> disabledOptimizers = new HashSet<>();
+                        disabledOptimizers.add(optimizerPart);
+                        detectHitsInLogicalOptimization(requiredOptimizers, querySpan, disabledOptimizers);
                     }
-                    eop.disableOptimizerAndDependencies(optimizerConfiguration);
                 }
+                else {
+                    // Approach II: Disable all effective optimizers and check for alternatives
+                    // enable all optimizers and rules again and find alternative optimizers
+                    optimizerConfiguration.reset();
+                    int prevNumEffectiveOptimizers;
+                    do {
+                        prevNumEffectiveOptimizers = querySpan.getSeenOptimizers().size();
+                        // disable all effective optimizers
+                        optimizerConfiguration.disableOptimizers(querySpan.getSeenOptimizers().stream().map(EffectiveOptimizerPart::getName).collect(Collectors.toList()));
 
-                detectHitsInLogicalOptimization(requiredOptimizers, querySpan, effectiveOptimizers);
-                if (numRequiredOptimizers < requiredOptimizers.size()) {
-                    // we detected new required optimizers, re-run the detection of alternative rules
-                    numRequiredOptimizers = requiredOptimizers.size();
-                    continue;
+                        Set<EffectiveOptimizerPart> effectiveOptimizers = new HashSet<>(querySpan.getSeenOptimizers());
+                        detectHitsInLogicalOptimization(requiredOptimizers, querySpan, effectiveOptimizers);
+                    }
+                    while (prevNumEffectiveOptimizers < querySpan.getSeenOptimizers().size());
                 }
-                // find new alternative rules
-                Set<EffectiveOptimizerPart> newAlternativeRules = new HashSet<>(querySpan.getSeenOptimizers().stream().filter((EffectiveOptimizerPart e) -> !e.getOptimizerDependencies().isEmpty()).collect(Collectors.toList()));
-                newAlternativeRules.removeAll(knownOptimizers);
-                knownOptimizers.addAll(newAlternativeRules);
-                numNewEffectiveOptimizers = newAlternativeRules.size();
             }
-
             // send query span to driver
             baoConnector.exportEffectiveOptimizerParts(querySpan.getSeenOptimizers());
             baoConnector.exportRequiredOptimizerParts(requiredOptimizers);
@@ -655,9 +633,7 @@ public class SqlQueryExecution
             querySpan.addAlternativeRulesAndOptimizers(ImmutableSet.copyOf(disabledOptimizer), effectiveRulesAndOptimizers);
         }
         catch (Exception e) {
-            if (disabledOptimizer.size()==1) { // do not add multiple optimizers as required
-                requiredOptimizersOrRules.addAll(disabledOptimizer);
-            }
+            requiredOptimizersOrRules.addAll(disabledOptimizer);
         }
     }
 

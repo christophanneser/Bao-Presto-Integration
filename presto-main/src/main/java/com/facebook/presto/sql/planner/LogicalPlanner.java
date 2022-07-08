@@ -259,7 +259,8 @@ public class LogicalPlanner
                 long start = System.nanoTime();
                 try {
                     root = optimizer.optimize(root, session, variableAllocator.getTypes(), variableAllocator, idAllocator, warningCollector);
-                } catch (Exception e) {
+                }
+                catch (Exception e) {
                     // error, cannot apply optimizer
                     System.out.println(e);
                     throw e;
@@ -272,7 +273,10 @@ public class LogicalPlanner
                 if (getQuerySpan) {
                     int newHash = optimizerConfiguration.hashPlan(root);
                     if (newHash != hash || optimizerConfiguration.appliedCurrentOptimizer) {
-                        optimizerConfiguration.registerEffectiveOptimizer(optimizerName);
+                        if (!OptimizerConfiguration.requiredOptimizerNames.contains(optimizerName)) {
+                            // do not add required rules
+                            optimizerConfiguration.registerEffectiveOptimizer(optimizerName);
+                        }
                         hash = newHash;
                     }
                 }

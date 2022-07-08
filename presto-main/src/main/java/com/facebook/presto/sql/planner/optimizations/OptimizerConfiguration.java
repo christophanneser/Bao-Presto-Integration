@@ -37,7 +37,6 @@ public class OptimizerConfiguration
     public static final ImmutableSet<String> ruleNames = new ImmutableSet.Builder<String>()
             .add("AddIntermediateAggregations")
             .add("AggregationExpressionRewrite")
-            .add("AggregationRowExpressionRewrite")
             .add("ApplyExpressionRewrite")
             .add("ApplyConnectorOptimization")
             .add("ApplyRowExpressionRewrite")
@@ -55,7 +54,6 @@ public class OptimizerConfiguration
             .add("DesugarLambdaExpression")
             .add("DesugarRowSubscript")
             .add("DesugarTryExpression")
-            .add("DetermineJoinDistributionType")
             .add("DetermineSemiJoinDistributionType")
             .add("EliminateCrossJoins")
             .add("EliminateEmptyJoins")
@@ -70,7 +68,6 @@ public class OptimizerConfiguration
             .add("ExtractSpatialJoins")
             .add("ExtractSpatialLeftJoin")
             .add("FilterExpressionRewrite")
-            .add("FilterRowExpressionRewrite")
             .add("GatherAndMergeWindows")
             .add("ImplementBernoulliSampleAsFilter")
             .add("ImplementFilteredAggregations")
@@ -83,7 +80,6 @@ public class OptimizerConfiguration
             .add("JoinEnumerator")
             .add("JoinExpressionRewrite")
             .add("JoinNodeFlattener")
-            .add("JoinRowExpressionRewrite")
             .add("LambdaCaptureDesugaringRewriter")
             .add("LayoutConstraintEvaluatorForRowExpression")
             .add("LogicalExpressionRewriter")
@@ -102,12 +98,10 @@ public class OptimizerConfiguration
             .add("PickTableLayoutForPredicate")
             .add("PickTableLayoutWithoutPredicate")
             .add("PlanNodeWithCost")
-            .add("PlanRemoteProjections")
             .add("PlanWithConsumedDynamicFilters")
             .add("PreconditionRules")
             .add("ProjectExpressionRewrite")
             .add("ProjectOffPushDownRule")
-            .add("ProjectRowExpressionRewrite")
             .add("ProjectionContext")
             .add("PruneAggregationColumns")
             .add("PruneAggregationSourceColumns")
@@ -176,11 +170,9 @@ public class OptimizerConfiguration
             .add("TableFinishRowExpressionRewrite")
             .add("TableWriterRowExpressionRewrite")
             .add("TransformCorrelatedInPredicateToJoin")
-            .add("TransformCorrelatedLateralJoinToJoin")
             .add("TransformCorrelatedScalarAggregationToJoin")
             .add("TransformCorrelatedScalarSubquery")
             .add("TransformCorrelatedSingleRowSubqueryToProject")
-            .add("TransformExistsApplyToLateralNode")
             .add("TransformUncorrelatedInPredicateSubqueryToSemiJoin")
             .add("TransformUncorrelatedLateralToJoin")
             .add("TranslateExpressions")
@@ -192,14 +184,12 @@ public class OptimizerConfiguration
             .add("RemoveRedundantDistinct")
             .build();
     public static final ImmutableSet<String> optimizerNames = new ImmutableSet.Builder<String>()
-            .add("AddLocalExchanges")
             .add("ApplyConnectorOptimization")
             .add("CheckSubqueryNodesAreRewritten")
             .add("HashGenerationOptimizer")
             .add("HashBasedPartialDistinctLimit")
             .add("ImplementIntersectAndExceptAsUnion")
             .add("IndexJoinOptimizer")
-            .add("IterativeOptimizer") // <-- will always be enabled!
             .add("KeyBasedSampler")
             .add("LimitPushDown")
             .add("MergeJoinOptimizer")
@@ -211,10 +201,22 @@ public class OptimizerConfiguration
             .add("RemoveUnsupportedDynamicFilters")
             .add("ReplicateSemiJoinInDelete")
             .add("SetFlatteningOptimizer")
-            .add("StatsRecordingPlanOptimizer")
             .add("TransformQuantifiedComparisonApplyToLateralJoin")
             .add("UnaliasSymbolReferences")
             .add("WindowFilterPushDown")
+            .build();
+    public static final ImmutableSet<String> requiredOptimizerNames = new ImmutableSet.Builder<String>()
+            .add("JoinRowExpressionRewrite")
+            .add("TransformCorrelatedLateralJoinToJoin")
+            .add("TransformExistsApplyToLateralNode")
+            .add("AggregationRowExpressionRewrite")
+            .add("StatsRecordingPlanOptimizer")
+            .add("FilterRowExpressionRewrite")
+            .add("ProjectRowExpressionRewrite")
+            .add("IterativeOptimizer")
+            .add("PlanRemoteProjections")
+            .add("AddLocalExchanges")
+            .add("DetermineJoinDistributionType")
             .build();
     private static final Logger log = Logger.get(OptimizerConfiguration.class);
     public boolean appliedCurrentOptimizer;
@@ -252,7 +254,7 @@ public class OptimizerConfiguration
     public Boolean isOptimizerEnabled(String optimizer)
     {
         if (!optimizersEnabled.containsKey(optimizer)) {
-            log.error("optimizer %s does not exist in OptimizerConfiguration", optimizer);
+            // required optimizers are not stored in this list and are always required
             return true;
         }
         return optimizersEnabled.get(optimizer);
@@ -261,12 +263,14 @@ public class OptimizerConfiguration
     public void registerEffectiveRule(String rule)
     {
         assert (effectiveOptimizers != null);
+        if (requiredOptimizerNames.contains(rule)) return;
         effectiveOptimizers.add(new EffectiveOptimizerPart(OptimizerType.RULE, rule));
     }
 
     public void registerEffectiveOptimizer(String optimizer)
     {
         assert (effectiveOptimizers != null);
+        if (requiredOptimizerNames.contains(optimizer)) return;
         effectiveOptimizers.add(new EffectiveOptimizerPart(OptimizerType.OPTIMIZER, optimizer));
     }
 
