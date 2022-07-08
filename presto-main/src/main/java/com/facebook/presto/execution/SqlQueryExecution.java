@@ -655,7 +655,9 @@ public class SqlQueryExecution
             querySpan.addAlternativeRulesAndOptimizers(ImmutableSet.copyOf(disabledOptimizer), effectiveRulesAndOptimizers);
         }
         catch (Exception e) {
-            requiredOptimizersOrRules.addAll(disabledOptimizer);
+            if (disabledOptimizer.size()==1) { // do not add multiple optimizers as required
+                requiredOptimizersOrRules.addAll(disabledOptimizer);
+            }
         }
     }
 
